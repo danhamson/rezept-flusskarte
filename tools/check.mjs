@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 globalThis.window = globalThis;
-for (const f of ["lexicon", "model", "parser", "layout", "schedule", "render"]) {
+for (const f of ["lexicon", "model", "parser", "layout", "schedule", "render", "share"]) {
   const p = path.join(root, "js", f + ".js");
   if (fs.existsSync(p)) vm.runInThisContext(fs.readFileSync(p, "utf8"), { filename: p });
 }
@@ -144,6 +144,9 @@ const CASES = [
       t.ok(potatoes && !r.reaches(potatoes, chicken.id), "Kartoffeln werden nicht mit dem Hähnchen gebacken");
       t.ok(potatoes && r.reaches(potatoes, pre.id), "Kartoffeln kommen in den vorgeheizten Ofen");
       t.ok(serve && r.reaches(serve, chicken.id) && r.reaches(serve, potatoes.id), "Servieren führt beide zusammen");
+      // Befund 4c: ein Ofen, zwei Temperaturen → nacheinander
+      const sc = r.plan(), a = sc.items.find((i) => i.step === chicken), b = sc.items.find((i) => i.step === potatoes);
+      t.ok(a && b && (a.end <= b.start || b.end <= a.start), `200 °C und 220 °C überlappen nicht (${a && a.start}–${a && a.end}, ${b && b.start}–${b && b.end})`);
       t.eq(r.lint.filter((l) => l.level !== "info").length, 0, "keine Warnungen");
     }
   },
@@ -203,16 +206,39 @@ const CASES = [
   },
   {
     name: "Befund 3: Unterheben gehört zur Hauptmasse",
-    known: "Befund 3 – Verkettung bei unterheben/unterrühren",
     text: "Rührkuchen (12 Stück)\nZutaten\n* 250 g Butter\n* 200 g Zucker\n* 4 Eier\n* 300 g Mehl\n* 1 Pck. Backpulver\nZubereitung\n1. Ofen auf 175 °C vorheizen. Eine Kastenform einfetten.\n2. Butter und Zucker schaumig rühren, Eier einzeln unterrühren.\n3. Mehl mit Backpulver mischen und unterheben.\n4. Den Teig in die Form füllen und 50 Min. backen.\n5. Auskühlen lassen.",
     check(r, t) {
       t.ok(r.reaches(r.step("backen"), r.ing("Eier").id), "Eier landen im Kuchen");
+      t.ok(r.reaches(r.step("backen"), r.ing("Mehl").id), "Mehl landet im Kuchen");
       t.eq(r.lint.filter((l) => l.level !== "info").length, 0, "keine losen Enden");
     }
   },
   {
+    name: "Befund 3: „the batter“ ist die angerührte Masse",
+    text: "Pancakes (serves 4)\nIngredients\n- 2 cups flour\n- 2 eggs\n- 1 1/2 cups milk\n- 1 tbsp butter\nInstructions\n1. Whisk the flour, eggs and milk.\n2. Melt the butter in a pan.\n3. Pour the batter into the pan and cook for 2 minutes until golden.\n4. Serve.",
+    check(r, t) {
+      t.ok(r.reaches(r.step("cook"), r.ing("flour").id), "Teig kommt in die Pfanne");
+      t.ok(r.reaches(r.step("cook"), r.ing("butter").id), "Butter ist in der Pfanne");
+    }
+  },
+  {
+    name: "Befund 3: Rest einkneten setzt den Teig fort",
+    text: "Teig (4 Portionen)\nZutaten\n* 300 g Mehl\n* 250 ml Milch\nZubereitung\n1. 200 g Mehl mit der Milch verrühren.\n2. Das restliche Mehl unterkneten.",
+    check(r, t) {
+      t.ok(r.reaches(r.step("unterkneten"), r.step("verrühren").id), "unterkneten nimmt den Teig");
+      t.eq(r.lint.filter((l) => l.level !== "info").length, 0, "keine losen Enden");
+    }
+  },
+  {
+    name: "Befund 3: ein Nebenstrang wird nicht ungefragt eingerührt",
+    text: "Soße (2 Portionen)\nZutaten\n* 1 Zwiebel\n* 2 Möhren\n* 200 ml Sahne\n* 1 EL Butter\nZubereitung\n1. Zwiebel und Möhren würfeln.\n2. Butter in einem Topf schmelzen.\n3. Sahne unterrühren.\n4. Gemüse darin 10 Min. köcheln lassen.",
+    check(r, t) {
+      const stir = r.step("unterrühren");
+      t.ok(stir && !r.reaches(stir, r.ing("Möhren").id), "Gemüse kommt erst mit „darin“ dazu");
+    }
+  },
+  {
     name: "Befund 4: Nudeln kochen ohne Hände, sofort abgießen",
-    known: "Befund 4 – Zeitplan für kochen",
     text: sample("spaghetti-aglio-olio.txt"),
     check(r, t) {
       const boil = r.step("kochen"), drain = r.step("abgießen");
@@ -223,7 +249,6 @@ const CASES = [
   },
   {
     name: "Befund 7: Zutaten wiederfinden",
-    known: "Befund 7 – Einzahl/Mehrzahl, Stückwörter, Zeilen ohne Aufzählungszeichen",
     text: "Frühstück\n4 Eier\n50 g Haferflocken\nSalz\n1. 3 Eier mit Salz verquirlen.\n2. Das restliche Ei und die Haferflocken unterrühren.",
     check(r, t) {
       t.eq(r.m.ingredients.filter((z) => z.missing).length, 0, "„Ei“ findet „Eier“");
@@ -234,18 +259,52 @@ const CASES = [
   },
   {
     name: "Befund 8: Zwischenprodukte mit Partizip",
-    known: "Befund 8 – fehlende Partizipien",
     text: "Milchreis (2 Portionen)\nZutaten\n* 100 g Reis\n* 500 ml Milch\n* 1 EL Puderzucker\nZubereitung\n1. Milch aufkochen.\n2. Reis zugeben und 30 Min. quellen lassen.\n3. Mit Puderzucker bestäuben.",
     check(r, t) {
       const labels = r.m.steps.map((s) => M.productLabel(r.m, s, r.idx));
       t.ok(!labels.some((l) => /\((quellen lassen|bestäuben)\)$/.test(l)), "kein Infinitiv im Namen: " + labels.join(" | "));
+      t.eq(M.participle("unterheben"), "untergehoben", "trennbar, stark");
+      t.eq(M.participle("übergießen"), "übergossen", "„über-“ untrennbar");
+      t.eq(M.participle("beträufeln"), "beträufelt", "untrennbar, -eln");
+      t.eq(M.participle("blanchieren"), "blanchiert", "-ieren ohne ge-");
+      t.eq(M.participle("chop"), "chopped", "englisch");
+    }
+  },
+  {
+    name: "T2: Rezept-Code mit Größengrenze entpacken",
+    text: "",
+    async check(r, t) {
+      const ok = FK.parse(sample("kartoffelgratin.txt"));
+      const back = await FK.share.decode(await FK.share.encode(ok));
+      t.eq(back.title, ok.title, "normaler Code geht hin und zurück");
+      // 3 MB gleicher Zeichen packen sich auf wenige Kilobyte
+      const bomb = new TextEncoder().encode(JSON.stringify({ title: "x".repeat(3 * 1024 * 1024), steps: [] }));
+      const packed = new Uint8Array(await new Response(new Blob([bomb]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer());
+      const code = "FK1." + Buffer.from(packed).toString("base64url");
+      let err = null;
+      try { await FK.share.decode(code); } catch (e) { err = e.message; }
+      t.ok(code.length < 20000, "präparierter Code ist klein (" + code.length + " Zeichen)");
+      t.eq(err, "Der Code ist zu groß für ein Rezept.", "präparierter Code wird abgelehnt");
+    }
+  },
+  {
+    name: "T3/T4: Dauer im Struktur-Editor",
+    text: "",
+    check(r, t) {
+      t.eq(M.normDur("7½"), { min: 7.5, max: 7.5 }, "„7½“ wie angezeigt");
+      t.eq(M.normDur("35–40"), { min: 35, max: 40 }, "Spanne ohne Einheit");
+      t.eq(M.normDur("1–2 h"), { min: 60, max: 120 }, "Stunden");
+      t.eq(M.normDur("1,5 Std."), { min: 90, max: 90 }, "Dezimalkomma");
+      t.eq(M.normDur("30 Sek."), { min: 0.5, max: 0.5 }, "Sekunden");
+      t.eq(M.normDur("90 s"), { min: 1.5, max: 1.5 }, "Sekunden kurz");
+      t.eq(M.normDur("10 Minuten"), { min: 10, max: 10 }, "Minuten");
     }
   }
 ];
 
 function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
-function runTests() {
+async function runTests() {
   let failed = 0, open = 0, fixed = 0;
   for (const c of CASES) {
     const errors = [];
@@ -253,7 +312,7 @@ function runTests() {
       ok: (cond, msg) => { if (!cond) errors.push(msg); },
       eq: (got, want, msg) => { if (!same(got, want)) errors.push(`${msg}: erwartet ${JSON.stringify(want)}, erhalten ${JSON.stringify(got)}`); }
     };
-    try { c.check(recipe(c.text), t); } catch (e) { errors.push("Ausnahme: " + (e && e.stack || e)); }
+    try { await c.check(recipe(c.text), t); } catch (e) { errors.push("Ausnahme: " + (e && e.stack || e)); }
     if (c.known) {
       if (errors.length) { open++; console.log(`  offen  ${c.name}  (${c.known})`); }
       else { fixed++; console.log(`  BEHOBEN ${c.name}  – Markierung „known“ entfernen`); }
@@ -270,4 +329,4 @@ function runTests() {
 
 const arg = process.argv[2];
 if (arg) dump(arg === "--dump" ? path.join(root, "samples", "kartoffelgratin.txt") : arg);
-else process.exitCode = runTests();
+else process.exitCode = await runTests();

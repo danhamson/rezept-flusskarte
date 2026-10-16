@@ -268,6 +268,8 @@
       else if (mode === "steps") stepLines.push(L);
       else if (isNumberedStep(t)) stepLines.push(L);
       else if (isListLine(t)) ingLines.push(L);
+      // ohne Überschriften: kurze Zeile ohne Satzzeichen und Verb im Zutatenblock ist eine Zutat („Salz“)
+      else if (!hasHeader && ingLines.length && !stepLines.length && t.length < 40 && !endsSentence(t) && !findVerb(t, { guess: false })) ingLines.push(L);
       else if (!hasHeader) stepLines.push(L);
       // sonst: Einleitungstext vor der ersten Überschrift
     }
@@ -488,7 +490,8 @@
       const piece = ["flöckchen", "flocken"].find((p) => t.lw.endsWith(p) && t.lw !== p);
       for (const h of chosen) {
         let p = portion && !wholeUse(h.z, portion) ? Object.assign({}, portion) : null;
-        if (piece) p = { text: (p ? p.text + " " : "") + cap(piece), kind: "part" };
+        // „Haferflocken“ ist die Zutat selbst, „Butterflöckchen“ ein Stück davon
+        if (piece && !h.z.name.toLowerCase().endsWith(piece)) p ={ text: (p ? p.text + " " : "") + cap(piece), kind: "part" };
         else if (p && p.kind === "number") {
           const unitPiece = ["zehe", "zehen", "scheibe", "scheiben"].find((x) => t.lw.endsWith(x));
           p.text = p.text + (unitPiece ? " " + cap(unitPiece) : "") + (p.adj ? ", " + p.adj : "");
@@ -589,6 +592,62 @@
     return !!s && s.inputs.some((x) => reaches(model, x.ref, target, seen));
   }
 
+  // Verben, die etwas in eine bestehende Masse einarbeiten
+  const INTO = new Set(["unterheben", "unterrühren", "unterziehen", "untermischen", "einrühren", "unterarbeiten", "unterkneten", "fold"]);
+  const MASS_WORD = /(?<![-\wäöüß])(teig|masse|mischung|batter|dough|mixture)(?![-\wäöüß])/i;
+  const verbClass = (s) => (lex.V[String(s.verb).toLowerCase().split(" ")[0]] || {}).cls;
+
+  function reachesCombine(model, ref, seen) {
+    seen = seen || new Set();
+    if (seen.has(ref)) return false;
+    seen.add(ref);
+    const s = model.steps.find((x) => x.id === ref);
+    return !!s && (verbClass(s) === "combine" || s.inputs.some((x) => reachesCombine(model, x.ref, seen)));
+  }
+
+  /** Zutaten und Schritte, aus denen ein Schritt entsteht. */
+  function upstreamOf(model, s) {
+    const out = new Set();
+    const walk = (x) => {
+      for (const inp of x.inputs) {
+        if (out.has(inp.ref)) continue;
+        out.add(inp.ref);
+        const t = model.steps.find((y) => y.id === inp.ref);
+        if (t) walk(t);
+      }
+    };
+    walk(s);
+    return out;
+  }
+
+  /** Strang beginnt bei einem Gerät (Form, Ofen) statt bei Zutaten. */
+  function equipmentLed(model, s) {
+    for (let x = s, guard = 0; x && guard < 50; guard++) {
+      if (verbClass(x) === "equip") return true;
+      const first = x.inputs[0];
+      if (!first) return false;
+      if (model.equipment.some((g) => g.id === first.ref)) return true;
+      x = model.steps.find((y) => y.id === first.ref);
+    }
+    return false;
+  }
+
+  /** Hauptmasse für „unterheben“: offener, älterer Zutatenstrang mit den meisten Zutaten. */
+  function mainMass(st, step, inputs, side) {
+    const model = st.model;
+    const sideUp = upstreamOf(model, side);
+    const sideStart = Math.min(model.steps.indexOf(side), ...[...sideUp].map((id) => model.steps.findIndex((y) => y.id === id)).filter((i) => i >= 0));
+    const count = (s) => [...upstreamOf(model, s)].filter((id) => model.ingredients.some((z) => z.id === id)).length;
+    let best = null, bestN = 0;
+    model.steps.forEach((s, i) => {
+      if (s === step || i >= sideStart || st.consumed.has(s.id) || equipmentLed(model, s)) return;
+      if (inputs.some((x) => reaches(model, x.ref, s.id))) return;
+      const n = count(s);
+      if (n && n >= bestN) { best = s; bestN = n; }
+    });
+    return best;
+  }
+
   function currentDish(st, exclude) {
     if (st.prev && !st.consumed.has(st.prev.id) && st.prev !== exclude) return st.prev;
     for (let i = st.model.steps.length - 1; i >= 0; i--) {
@@ -605,7 +664,7 @@
       ? { key: info.labelVerb, display: info.labelVerb, cls: lex.V[info.labelVerb].cls, k: -1 }
       : findVerb(body) || { key: "", display: "?", cls: "other", k: -1 };
     const step = {
-      id: M.newId(model, "s"), verb: verb.display, detail: "", inputs: [], dur: null, temp: "", passive: lex.PASSIVE.has(verb.key),
+      id: M.newId(model, "s"), verb: verb.display, detail: "", inputs: [], dur: null, temp: "", passive: lex.PASSIVE.has(verb.key) || / lassen$/.test(verb.display),
       repeat: "", cue: info.cue || "", note: "", product: "", src: info.src || body.trim(), srcStep: st.n,
       srcRange: [info.absStart, info.absStart + (info.src || body).length]
     };
@@ -681,7 +740,7 @@
     const isStepRef = (ref) => model.steps.some((x) => x.id === ref);
     const rawIngredients = inputs.filter((x) => model.ingredients.some((z) => z.id === x.ref));
     const anaphor = /\b(darin|darauf|dazu|hinein|daran|darüber|obenauf|in it|on top|over it)\b/i.test(body);
-    const newContainer = /\b(in|auf)\s+(eine|einer|einen|ein)\s+[\wäöüß-]*(schüssel|topf|pfanne|form|blech|bräter|glas|kasserolle)\b|\b(in|into)\s+an?\s+(?:\w+\s+)?(bowl|pan|pot|dish|skillet)\b/i.test(body);
+    const newContainer = /\b(in|auf)\s+(eine|einer|einen|einem|ein)\s+[\wäöüß-]*(schüssel|topf|pfanne|form|blech|bräter|glas|kasserolle)\b|\b(in|into)\s+an?\s+(?:\w+\s+)?(bowl|pan|pot|dish|skillet)\b/i.test(body);
     const cur = currentDish(st, step);
     const prevOpen = st.prev && !st.consumed.has(st.prev.id) ? st.prev : null;
     const included = (s) => s && inputs.some((x) => x.ref === s.id);
@@ -692,6 +751,16 @@
     else if (info.join === "und" && verb.cls !== "equip" && !rawIngredients.length && prevOpen && !included(prevOpen)) chainTo = prevOpen; // „… abgießen und mit dem Öl schwenken“
     else if (info.join === "und" && verb.cls === "combine" && prevOpen && !included(prevOpen)) chainTo = prevOpen; // „… in eine Schüssel geben und mit dem Öl vermischen“
     if (chainTo) inputs.unshift({ ref: chainTo.id, portion: "" });
+    // „Mehl mit Backpulver mischen und unterheben“: der eben angerührte Nebenstrang kommt in die Hauptmasse
+    if (INTO.has(verb.key) && !mentions.length && chainTo && chainTo.srcStep === st.n) {
+      const main = mainMass(st, step, inputs, chainTo);
+      if (main) inputs.unshift({ ref: main.id, portion: "" });
+    }
+    // „den Teig“, „the batter“: die zuletzt angerührte Masse, wenn keiner der Eingänge sie enthält
+    if (MASS_WORD.test(body) && !inputs.some((x) => reachesCombine(model, x.ref))) {
+      const mix = model.steps.slice().reverse().find((s) => s !== step && !st.consumed.has(s.id) && verbClass(s) === "combine" && !inputs.some((x) => reaches(model, x.ref, s.id)));
+      if (mix) inputs.push({ ref: mix.id, portion: "" });
+    }
     // Anrichten führt alle offenen Stränge zusammen („Nudeln mit der Bolognese servieren“)
     if (verb.cls === "finish") {
       for (const s of model.steps) {

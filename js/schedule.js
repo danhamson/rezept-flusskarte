@@ -4,6 +4,7 @@
  * Schritt mit dem längsten Restweg (kritischer Pfad). Danach rückt ein
  * Rückwärtsdurchlauf alles, dessen Ergebnis erst später gebraucht wird, so spät
  * wie möglich vor seinen Verbraucher (Nudeln erst kurz vor dem Servieren).
+ * Der Ofen hat eine Temperatur: Backschritte mit verschiedenen Temperaturen überlappen nie.
  */
 (function (FK) {
   "use strict";
@@ -18,6 +19,31 @@
     const v = e.verb[key] != null ? e.verb[key] : e.cls[(lex.V[key] || {}).cls || "other"];
     return { min: v * (s.repeat ? 1.5 : 1), est: true };
   }
+
+  const verbKey = (s) => String(s.verb || "").toLowerCase().split(/\s+/)[0];
+
+  /** Ofentemperatur eines Backschritts (eigene oder die des vorgeheizten Ofens); null, wenn kein Ofen. */
+  function ovenOf(s, idx) {
+    if (!lex.OVEN.has(verbKey(s))) return null;
+    const num = (t) => { const m = String(t || "").match(/\d+/); return m ? +m[0] : null; };
+    if (s.temp) return { temp: num(s.temp) };
+    const seen = new Set();
+    const walk = (x) => {
+      for (const inp of x.inputs) {
+        const e = idx.byId.get(inp.ref);
+        if (!e || e.kind !== "step" || seen.has(inp.ref)) continue;
+        seen.add(inp.ref);
+        const t = e.node;
+        if (t.temp && (/vorheiz|preheat/i.test(t.verb) || lex.OVEN.has(verbKey(t)))) return num(t.temp);
+        const r = walk(t);
+        if (r != null) return r;
+      }
+      return null;
+    };
+    return { temp: walk(s) };
+  }
+  // Ein Ofen hat eine Temperatur: Backschritte mit verschiedenen Temperaturen laufen nacheinander
+  const clash = (a, b) => a.oven && b.oven && a.oven.temp != null && b.oven.temp != null && a.oven.temp !== b.oven.temp;
 
   // Spätestes Ende ≤ limit, zu dem ein aktiver Schritt der Dauer dur in keine
   // belegte Zeit fällt: Jeder Treffer im Fenster erzwingt ein Ende vor seinem Beginn.
@@ -48,7 +74,7 @@
       if (free && cons.length) {
         const limit = Math.min(...cons.map((c) => c.start));
         const dur = it.end - it.start;
-        const busy = it.passive ? null : items.filter((o) => o !== it && !o.passive);
+        const busy = it.passive ? (it.oven ? items.filter((o) => o !== it && clash(o, it)) : null) : items.filter((o) => o !== it && !o.passive);
         const e = busy ? latestSlot(busy, limit, dur) : limit;
         if (e > it.end + EPS) { it.start = e - dur; it.end = e; }
       }
@@ -61,7 +87,7 @@
   function plan(m) {
     const idx = M.index(m);
     const steps = m.steps;
-    const info = new Map(steps.map((s, i) => { const d = durationOf(s); return [s.id, { step: s, order: i, dur: d.min, est: d.est, passive: !!s.passive }]; }));
+    const info = new Map(steps.map((s, i) => { const d = durationOf(s); return [s.id, { step: s, order: i, dur: d.min, est: d.est, passive: !!s.passive, oven: ovenOf(s, idx) }]; }));
     const tail = new Map();
     const tailOf = (id, guard) => {
       if (tail.has(id)) return tail.get(id);
@@ -87,7 +113,9 @@
       for (const s of steps) {
         const it = info.get(s.id);
         if (end.has(s.id) || !it.passive || !isReady(s)) continue;
-        const start = readyAt(s);
+        let start = readyAt(s);
+        // Ofen belegt mit anderer Temperatur: warten, bis er frei ist
+        for (let hit; (hit = items.filter((o) => clash(o, it) && o.start < start + it.dur - EPS && o.end > start + EPS)).length;) start = Math.max(...hit.map((o) => o.end));
         end.set(s.id, start + it.dur);
         items.push({ ...it, start, end: start + it.dur });
         progressed = true;

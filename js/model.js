@@ -117,11 +117,16 @@
   function normDur(d) {
     if (d == null || d === "") return null;
     if (typeof d === "string") {
-      const m = d.match(/(\d+(?:[.,]\d+)?)\s*(?:[-–]\s*(\d+(?:[.,]\d+)?))?\s*(h|std|stunden?|min|minuten?)?/i);
+      // Minuten ohne Einheit; „7½“ (so zeigt der Editor halbe Minuten), „1–2 h“, „30 Sek.“
+      const N = "(\\d+(?:[.,]\\d+)?(?:\\s*" + FRAC_RE + ")?|" + FRAC_RE + ")";
+      const m = d.match(new RegExp(N + "\\s*(?:[-–]\\s*" + N + ")?\\s*(stunden?|std|h|minuten?|min|sekunden?|sek|sec|seconds?|s)?(?![a-zäöüß])", "i"));
       if (!m) return null;
-      let a = parseFloat(m[1].replace(",", ".")), b = m[2] ? parseFloat(m[2].replace(",", ".")) : a;
-      if (m[3] && /^(h|std|stunde)/i.test(m[3])) { a *= 60; b *= 60; }
-      return { min: a, max: b };
+      const val = (s) => num1(s.replace(/\s+/g, ""));
+      let a = val(m[1]), b = m[2] ? val(m[2]) : a;
+      if (!isFinite(a) || !isFinite(b)) return null;
+      const u = (m[3] || "").toLowerCase();
+      const f = /^(h|std|stunde)/.test(u) ? 60 : /^(s|sek|sec)/.test(u) ? 1 / 60 : 1;
+      return { min: a * f, max: b * f };
     }
     const q = normQty(d);
     if (!q) return null;
@@ -164,6 +169,8 @@
     if (key.length < 4 && (token === key || (token.startsWith(key) && token.length <= key.length + 3))) return true;
     // Kurzform eines zusammengesetzten Namens: „Chili“ → Chilischote, „Öl“ → Olivenöl
     const t = stem(token);
+    // Einzahl zur Mehrzahl in der Liste: „Ei“ → Eier, „Zwiebel“ → Zwiebeln
+    if (t.length >= 2 && key.startsWith(t) && /^(er|e|n|en|s)$/.test(key.slice(t.length))) return true;
     if (t.length >= 4 && key.length - t.length >= 3 && key.startsWith(t)) return true;
     if ((t.length >= 3 || t === "öl") && key.length - t.length >= 3 && key.endsWith(t)) return true;
     return false;
@@ -233,9 +240,45 @@
     return { byId, consumers };
   }
 
+  // Starke Verben (Grundwort); alle anderen bilden ge-…-t
+  const STRONG_PART = {
+    geben: "gegeben", nehmen: "genommen", waschen: "gewaschen", braten: "gebraten", backen: "gebacken", schlagen: "geschlagen",
+    schmelzen: "geschmolzen", stechen: "gestochen", tragen: "getragen", halten: "gehalten", ziehen: "gezogen", gießen: "gegossen",
+    schneiden: "geschnitten", reiben: "gerieben", streichen: "gestrichen", lassen: "gelassen", quellen: "gequollen", stehen: "gestanden",
+    gehen: "gegangen", schließen: "geschlossen", heben: "gehoben", frieren: "gefroren", mahlen: "gemahlen", stoßen: "gestoßen",
+    wiegen: "gewogen", sieden: "gesotten", schieben: "geschoben", werfen: "geworfen", streuen: "gestreut", bringen: "gebracht", reißen: "gerissen"
+  };
+  const EN_PART = { cut: "cut", beat: "beaten", grind: "ground", put: "put", set: "set", spread: "spread", let: "let", freeze: "frozen", shake: "shaken", rise: "risen" };
+
+  /** „verrühren“ → „verrührt“, „unterheben“ → „untergehoben“, „bestäuben“ → „bestäubt“, „melt“ → „melted“. */
   function participle(verb) {
     const v = String(verb || "").toLowerCase().split(/\s+/)[0];
-    return lex.PARTICIPLE[v] || verb;
+    if (lex.PARTICIPLE[v]) return lex.PARTICIPLE[v];
+    const e = lex.V[v];
+    if (e && e.en) {
+      if (EN_PART[v]) return EN_PART[v];
+      if (/e$/.test(v)) return v + "d";
+      if (/[^aeiou]y$/.test(v)) return v.slice(0, -1) + "ied";
+      if (/^[^aeiou]*[aeiou][bdgmnprt]$/.test(v)) return v + v.slice(-1) + "ed";
+      return v + "ed";
+    }
+    if (!/(en|eln|ern)$/.test(v) || v.length < 4) return verb;
+    const p = lex.PARTICLES.find((x) => v.startsWith(x) && v.length - x.length >= 5 && /(en|eln|ern)$/.test(v.slice(x.length)));
+    // „über-“ ist bei Küchenverben untrennbar: übergossen, überstreut
+    if (p === "über") return p + baseParticiple(v.slice(p.length)).replace(/^ge/, "");
+    if (p) return p + baseParticiple(v.slice(p.length));
+    return baseParticiple(v);
+  }
+  function baseParticiple(v) {
+    if (STRONG_PART[v]) return STRONG_PART[v];
+    const prefix = /^(be|ge|er|ver|zer|ent|emp|miss)/.test(v) && v.length > 6;
+    for (const [base, part] of Object.entries(STRONG_PART)) {
+      if (prefix && v.endsWith(base) && v.length > base.length) return v.slice(0, -base.length) + part.slice(2); // verschlagen → verschlagen
+    }
+    const stem = /e[lr]n$/.test(v) ? v.slice(0, -1) : v.slice(0, -2);
+    const tEnd = /[dt]$|[^aeiouäöülrhmn][mn]$/.test(stem) ? "et" : "t";
+    if (/ieren$/.test(v) || prefix) return stem + tEnd;
+    return "ge" + stem + tEnd;
   }
 
   /** Gerät am Anfang der Hauptkette eines Schritts (Form → ausgestrichen → abgerieben). */

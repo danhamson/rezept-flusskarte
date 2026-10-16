@@ -29,7 +29,7 @@ Regeln:
 4. Ein Schritt ist genau eine Handlung mit einem kurzen Verb im Infinitiv (z. B. „hobeln“, „verrühren“, „backen“). "detail" hat höchstens fünf Wörter (Größe, Form, Hitze, abgedeckt).
 5. "inputs" verweisen auf Zutaten-, Geräte- oder frühere Schritt-IDs. Das Ergebnis jedes Schritts wird von genau einem späteren Schritt verwendet, nur das des letzten Schritts nicht. Wird eine Zutat an mehreren Stellen verwendet, bekommt jede Verwendung einen eigenen Eingang mit "portion" (z. B. „etwas“, „⅔“, „Rest“, „1 Zehe“). Jede Zutat der Liste kommt mindestens einmal vor.
 6. Ordne die Schritte in sinnvoller Arbeitsreihenfolge. Unabhängige Vorbereitungen sind eigene Stränge und werden erst dort zusammengeführt, wo sie wirklich zusammenkommen.
-7. "dur" in Minuten nur, wenn das Rezept eine Zeit nennt, sonst null. "temp" wie „180 °C“ oder „mittlere Hitze“, sonst "". "passive": true bei Wartezeit ohne Handgriffe (vorheizen, backen, ruhen, kühlen).
+7. "dur" in Minuten nur, wenn das Rezept eine Zeit nennt, sonst null. "temp" wie „180 °C“ oder „mittlere Hitze“, sonst "". "passive": true bei Wartezeit ohne Handgriffe (vorheizen, backen, kochen, köcheln, ruhen, kühlen).
 8. "repeat" z. B. „3–4“, wenn ein Schritt wiederholt wird, sonst "". "cue": woran man erkennt, dass der Schritt fertig ist. "note": Begründung oder Tipp aus dem Rezept.
 9. "product": Name des Zwischenprodukts, wenn das Rezept einen nennt (z. B. „Zwiebelringe“, „Sahne-Milch-Mischung“), sonst "".
 10. "src": das kürzeste wörtliche Zitat aus "source" (nicht aus dem eingeschickten Text), aus dem der Schritt stammt, Zeichen für Zeichen kopiert.

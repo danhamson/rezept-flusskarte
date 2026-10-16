@@ -59,12 +59,35 @@
   }
 
   const BROKEN = "Der Code ist beschädigt oder unvollständig.";
+  // Ein Rezept hat einige Kilobyte; mehr als 2 MB entpackt ist kein Rezept, sondern ein präparierter Link
+  const MAX_BYTES = 2 * 1024 * 1024;
+  const TOO_BIG = "Der Code ist zu groß für ein Rezept.";
+
+  /** Entpacken mit Obergrenze: bricht ab, sobald mehr als limit Bytes herauskommen. */
+  async function inflate(bytes, limit) {
+    const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+    const chunks = [];
+    let n = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      n += value.length;
+      if (n > limit) { reader.cancel().catch(() => {}); throw new Error(TOO_BIG); }
+      chunks.push(value);
+    }
+    const out = new Uint8Array(n);
+    let off = 0;
+    for (const c of chunks) { out.set(c, off); off += c.length; }
+    return out;
+  }
+
   async function decodeOne(code) {
     let bytes;
     try { bytes = unb64url(code.slice(4)); } catch (e) { throw new Error(BROKEN); }
+    if (bytes.length > MAX_BYTES) throw new Error(TOO_BIG);
     if (code[2] === "1") {
       if (!canZip) throw new Error("Dieser Browser kann komprimierte Codes nicht entpacken. Bitte einen aktuellen Browser verwenden.");
-      try { bytes = await pipe(bytes, new DecompressionStream("deflate-raw")); } catch (e) { throw new Error(BROKEN); }
+      try { bytes = await inflate(bytes, MAX_BYTES); } catch (e) { throw new Error(e && e.message === TOO_BIG ? TOO_BIG : BROKEN); }
     }
     let raw;
     try { raw = JSON.parse(dec.decode(bytes)); } catch (e) { throw new Error(BROKEN); }
@@ -125,5 +148,5 @@
     return location.origin + location.pathname + "#fk=" + code;
   }
 
-  FK.share = { encode, decode, find, isCodeOnly, fromHash, linkFor, compact };
+  FK.share = { encode, decode, find, isCodeOnly, fromHash, linkFor, compact, MAX_BYTES };
 })(window.FK = window.FK || {});

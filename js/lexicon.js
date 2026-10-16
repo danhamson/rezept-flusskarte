@@ -25,7 +25,7 @@
   def("finish", "servieren,anrichten,portionieren,tranchieren,garnieren,auftragen");
   def("prep", "abgießen,abseihen,abschrecken,auspressen,ausdrücken,zerbröseln,ausrollen,formen,abziehen,einritzen,einschneiden,zerteilen,zerpflücken,entrinden,auslösen,ausstechen,aushöhlen,durchpressen,passieren,abschöpfen,entfernen,zerkrümeln");
   def("combine", "schwenken,umrühren,durchrühren,unterarbeiten,aufschäumen,montieren,vermahlen");
-  def("add", "dazufügen,hinzugießen");
+  def("add", "dazufügen,hinzugießen,unterkneten,einkneten");
   def("heat", "zubereiten,einköcheln");
   def("add", "bestäuben,aufstreichen,beträufeln,überstreuen,auflegen,darübergeben,dazugießen,einstreuen,nachwürzen,beifügen");
   def("heat", "wenden,anschwitzen,aufbacken,backen lassen,schmelzen lassen,erhitzen lassen,auslassen,einreduzieren,abflämmen,bräunen,rösten lassen");
@@ -89,7 +89,7 @@
   }
 
   // Wartezeiten: Hände frei
-  const PASSIVE = new Set("vorheizen,backen,überbacken,gratinieren,schmoren,köcheln,einköcheln,simmern,garen,dämpfen,ruhen,ziehen,quellen,abkühlen,auskühlen,kühlen,gehen,marinieren,einweichen,durchziehen,stehen,auftauen,gefrieren,kaltstellen,kalt stellen,abdecken,zudecken,preheat,bake,roast,braise,simmer,rest,cool,chill,refrigerate,marinate,soak".split(","));
+  const PASSIVE = new Set("vorheizen,backen,überbacken,gratinieren,schmoren,kochen,köcheln,einköcheln,simmern,garen,dämpfen,ruhen,ziehen,quellen,abkühlen,auskühlen,kühlen,gehen,marinieren,einweichen,durchziehen,stehen,auftauen,gefrieren,kaltstellen,kalt stellen,abdecken,zudecken,preheat,bake,roast,braise,simmer,boil,rest,cool,chill,refrigerate,marinate,soak".split(","));
   // Verben, die den Ofen brauchen
   const OVEN = new Set("backen,überbacken,gratinieren,ausbacken,bake,roast,broil".split(","));
   // Verben, die mit "lassen" zu einer Phrase werden
