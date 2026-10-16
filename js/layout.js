@@ -14,7 +14,13 @@
   "use strict";
   const M = FK.model;
 
-  function build(m) {
+  /**
+   * opts.collapse: Menge von Schritt-IDs, deren ganzer Ast als eine Zeile „✓ #n Produkt“
+   * erscheint (erledigt und ausgeblendet). Die Nummerierung „Teil 1/2“ bleibt die der vollen Karte.
+   */
+  function build(m, opts) {
+    const collapse = opts && opts.collapse && opts.collapse.size ? opts.collapse : null;
+    const fullUse = collapse ? new Map(build(m).rows.filter((r) => r.use).map((r) => [r.consumer + "|" + r.ref, r.use])) : null;
     const idx = M.index(m);
     const steps = m.steps;
     const order = new Map(steps.map((s, i) => [s.id, i]));
@@ -70,9 +76,26 @@
       } else {
         r.kind = e.kind; r.node = e.node;
         const n = (useSeen.get(inp.ref) || 0) + 1; useSeen.set(inp.ref, n);
-        r.use = n; r.uses = useCount.get(inp.ref) || 1;
+        r.use = (fullUse && fullUse.get(consumer.id + "|" + inp.ref)) || n; r.uses = useCount.get(inp.ref) || 1;
         r.label = e.node.name;
       }
+      rows.push(r);
+      return r;
+    }
+
+    // eingeklappter Ast: Schritte gelten als platziert, eine Zeile steht für das Ergebnis
+    function collapsedRow(s, consumer) {
+      const mark = (t, d) => {
+        if (placed.has(t.id) || d > 80) return;
+        placed.add(t.id);
+        for (const inp of effInputs(t)) {
+          const e = idx.byId.get(inp.ref);
+          if (e && e.kind === "step" && owner.get(inp.ref) === t.id) mark(e.node, d + 1);
+        }
+      };
+      mark(s, 0);
+      const r = { index: rows.length, consumer: consumer.id, ref: s.id, portion: "", kind: "done", step: s, order: order.get(s.id) };
+      r.label = "#" + (r.order + 1) + " " + M.productLabel(m, s, idx);
       rows.push(r);
       return r;
     }
@@ -90,6 +113,11 @@
       kids.sort((a, b) => (a.key - b.key) || (a.i - b.i));
       const spans = [];
       for (const k of kids) {
+        if (k.step && collapse && collapse.has(k.step.id)) {
+          const r = collapsedRow(k.step, s);
+          spans.push({ r0: r.index, r1: r.index, col: 0, leaf: true });
+          continue;
+        }
         if (k.step) {
           const sp = place(k.step, depth + 1);
           if (sp) { spans.push(sp); continue; }

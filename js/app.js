@@ -35,7 +35,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
   const ZOOMS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.15, 1.3, 1.5];
   const S = {
     text: "", model: null, origin: "local", view: "flow", left: "text", servings: null, staleText: false,
-    mob: "in", zoom: 1, pdf: Object.assign({}, FK.print.DEFAULTS), shareSrc: true,
+    mob: "in", zoom: 1, pdf: Object.assign({}, FK.print.DEFAULTS), shareSrc: true, done: [], hideDone: false,
     downloads: null, inArtifact: !!(window.claude && window.claude.use)
   };
   const narrow = () => matchMedia("(max-width: 959.98px)").matches;
@@ -59,6 +59,8 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
       S.zoom = d.zoom === "fit" || ZOOMS.includes(d.zoom) ? d.zoom : 1;
       if (d.pdf && typeof d.pdf === "object") for (const k of Object.keys(FK.print.DEFAULTS)) if (typeof d.pdf[k] === typeof FK.print.DEFAULTS[k]) S.pdf[k] = d.pdf[k];
       S.shareSrc = d.shareSrc !== false;
+      S.done = Array.isArray(d.done) ? d.done.filter((x) => typeof x === "string") : [];
+      S.hideDone = !!d.hideDone;
       return true;
     } catch (e) { return false; }
   }
@@ -67,7 +69,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try {
-        localStorage.setItem(STORE, JSON.stringify({ text: S.text, model: S.model, origin: S.origin, view: S.view, left: S.left, servings: S.servings, staleText: S.staleText, mob: S.mob, zoom: S.zoom, pdf: S.pdf, shareSrc: S.shareSrc }));
+        localStorage.setItem(STORE, JSON.stringify({ text: S.text, model: S.model, origin: S.origin, view: S.view, left: S.left, servings: S.servings, staleText: S.staleText, mob: S.mob, zoom: S.zoom, pdf: S.pdf, shareSrc: S.shareSrc, done: S.done, hideDone: S.hideDone }));
       } catch (e) { /* privat oder blockiert */ }
     }, 250);
   }
@@ -83,8 +85,8 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
 
   /** Fertiges Modell übernehmen (KI, Code, JSON); der vorige Stand lässt sich zurückholen. */
   function adopt(m, origin, text, message) {
-    const prev = { text: S.text, model: S.model, origin: S.origin, servings: S.servings, staleText: S.staleText };
-    S.model = m; S.origin = origin; S.servings = m.servings; S.staleText = false;
+    const prev = { text: S.text, model: S.model, origin: S.origin, servings: S.servings, staleText: S.staleText, done: S.done };
+    S.model = m; S.origin = origin; S.servings = m.servings; S.staleText = false; S.done = [];
     if (typeof text === "string") { S.text = text; $("#src").value = text; }
     afterModelChange(true);
     showMobScrolled("out");
@@ -109,6 +111,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
   }
 
   function afterModelChange(structural) {
+    if (S.model && S.done.length) { const ids = new Set(S.model.steps.map((s) => s.id)); S.done = S.done.filter((id) => ids.has(id)); }
     save();
     renderHeader();
     renderView();
@@ -162,20 +165,21 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     $$('.pane-out [role="tab"]').forEach((t) => t.setAttribute("aria-selected", String(t.dataset.view === S.view)));
     const m = S.model;
     if (!m) { el.innerHTML = '<div class="empty-card"><p>Noch kein Rezept umgewandelt.</p></div>'; return; }
-    const opts = { servings: S.servings || m.servings };
+    const done = new Set(S.done);
+    const opts = { servings: S.servings || m.servings, done, hideDone: S.hideDone, timers: true };
     if (S.view === "flow") {
       const card = R.flowCard(m, opts);
-      el.innerHTML = '<div class="card-tools" role="group" aria-label="Kartengröße">' +
+      el.innerHTML = '<div class="card-tools">' + cookTools(m, done) + '<div class="zoom-tools" role="group" aria-label="Kartengröße">' +
         '<button type="button" class="icon-btn" data-zoom="-1" aria-label="Kleiner">−</button>' +
         '<span class="zoom-val" id="zoom-val"></span>' +
         '<button type="button" class="icon-btn" data-zoom="1" aria-label="Größer">+</button>' +
-        '<button type="button" class="btn ghost sm" data-zoom="fit" aria-pressed="' + (S.zoom === "fit") + '">Einpassen</button></div>' +
+        '<button type="button" class="btn ghost sm" data-zoom="fit" aria-pressed="' + (S.zoom === "fit") + '">Einpassen</button></div></div>' +
         '<div class="card-scroll" id="card-scroll">' + card.html + "</div>" +
         '<p class="legend"><span><span class="sw-pass"></span>Wartezeit, Hände frei</span><span><span class="tag tag-split">Teil 1/2</span> aufgeteilte Zutat</span>' +
-        '<span><span class="tag tag-heat">180 °C</span> <span class="tag tag-time">35 min</span> Hitze und Dauer</span><span>✓ fertig, wenn …</span><span>→ Name des Zwischenprodukts</span><span>Schritt antippen zum Bearbeiten</span></p>';
+        '<span><span class="tag tag-heat">180 °C</span> <span class="tag tag-time">35 min</span> Hitze und Dauer</span><span>✓ fertig, wenn …</span><span>→ Name des Zwischenprodukts</span><span>Schritt antippen: abhaken · Doppelklick: bearbeiten · Zeit antippen: Timer</span></p>';
       applyZoom();
     } else if (S.view === "timeline") {
-      el.innerHTML = R.timelineHtml(m);
+      el.innerHTML = '<div class="card-tools">' + cookTools(m, done) + "</div>" + R.timelineHtml(m, opts);
     } else if (S.view === "original") {
       el.innerHTML = R.originalHtml(m) + '<p class="legend">Unterstrichen: erkannte Zutaten. Fährt man über einen Satz, leuchtet der passende Schritt auf.</p>';
     } else {
@@ -183,6 +187,50 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
         '<label class="btn ghost" for="json-file">JSON-Datei öffnen</label><input type="file" id="json-file" accept=".json,application/json" hidden></div>' +
         '<textarea id="json-edit" spellcheck="false" aria-label="Flusskarte als JSON">' + esc(JSON.stringify(exportModel(m), null, 2)) + '</textarea><p class="json-err" id="json-err"></p>';
     }
+    FK.kitchen.paint();
+  }
+
+  // ---- Kochen: abhaken, ausblenden, Timer ---------------------------------------------------------
+  function cookTools(m, done) {
+    const n = m.steps.filter((s) => done.has(s.id)).length;
+    if (!n) return '<p class="cook-hint">Erledigte Schritte antippen, um sie abzuhaken.</p>';
+    return '<div class="cook-tools" role="group" aria-label="Fortschritt"><span class="cook-n"><b>' + n + "</b>/" + m.steps.length + " erledigt</span>" +
+      '<button type="button" class="btn ghost sm" data-cook="hide" aria-pressed="' + S.hideDone + '" title="Erledigte Äste einklappen; die Spalte vor einem offenen Schritt bleibt sichtbar">Erledigtes ausblenden</button>' +
+      '<button type="button" class="btn ghost sm" data-cook="reset">Zurücksetzen</button></div>';
+  }
+
+  // Haken an Ort und Stelle setzen: kein Neuaufbau, damit ein Doppelklick dasselbe Feld trifft.
+  // Nur beim Ausblenden ändert sich die Karte; dann kurz danach neu aufbauen.
+  let doneTimer = 0;
+  function setDone(id, on) {
+    const has = S.done.includes(id);
+    if (on == null) on = !has;
+    if (on === has) return;
+    S.done = on ? S.done.concat(id) : S.done.filter((x) => x !== id);
+    save();
+    const v = $("#view"), q = window.CSS && CSS.escape ? CSS.escape(id) : id;
+    $$('[data-step="' + q + '"][role="checkbox"]', v).forEach((el) => { el.classList.toggle("done", on); el.setAttribute("aria-checked", String(on)); });
+    $$('[data-for="' + q + '"]', v).forEach((el) => el.classList.toggle("done", on));
+    const slot = $(".card-tools > :first-child", v);
+    if (slot && S.model) slot.outerHTML = cookTools(S.model, new Set(S.done));
+    if (S.hideDone || !slot) {
+      clearTimeout(doneTimer);
+      doneTimer = setTimeout(() => {
+        const f = document.activeElement && document.activeElement.closest && document.activeElement.closest("#view [data-step][tabindex]");
+        const fid = f && f.dataset.step;
+        renderView();
+        const again = fid && $('#view [data-step="' + (window.CSS && CSS.escape ? CSS.escape(fid) : fid) + '"][tabindex]');
+        if (again) again.focus({ preventScroll: true });
+      }, 450);
+    }
+  }
+
+  function startTimer(id) {
+    const m = S.model, i = m ? m.steps.findIndex((s) => s.id === id) : -1;
+    if (i < 0) return;
+    const s = m.steps[i], d = M.normDur(s.dur);
+    if (!d) return;
+    FK.kitchen.start(id, i + 1 + ". " + [s.verb, s.product ? "→ " + s.product : s.detail].filter(Boolean).join(" "), d.min, M.durText(d));
   }
 
   // ---- Kartengröße (vor allem für Handy und Tablet) ------------------------------------------------
@@ -684,7 +732,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
   }
 
   function loadSample() {
-    S.text = SAMPLE; $("#src").value = SAMPLE; setLeft("text"); convertLocal(); toast("Beispiel geladen");
+    S.text = SAMPLE; $("#src").value = SAMPLE; S.done = []; setLeft("text"); convertLocal(); toast("Beispiel geladen");
   }
 
   // ---- Start ---------------------------------------------------------------------------------------
@@ -817,14 +865,35 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
         else stepZoom(+z.dataset.zoom);
         return;
       }
-      const op = e.target.closest("td.op[data-step], .tl-row[data-step]");
-      if (op) { openStep(op.dataset.step); return; }
+      const tm = e.target.closest(".tmr[data-timer]");
+      if (tm) { startTimer(tm.dataset.timer); return; }
+      const ck = e.target.closest("[data-cook]");
+      if (ck) {
+        if (ck.dataset.cook === "hide") S.hideDone = !S.hideDone;
+        else {
+          const prev = S.done;
+          S.done = [];
+          toast("Alle Haken entfernt", { label: "Rückgängig", run: () => { S.done = prev; save(); renderView(); } });
+        }
+        save(); renderView();
+        return;
+      }
+      const op = e.target.closest("td.op[data-step], .tl-row[data-step], td.done-row[data-step]");
+      if (op) { setDone(op.dataset.step); return; }
       const act = e.target.closest("button[data-act]");
       if (act && act.dataset.act === "json-copy") copyText($("#json-edit").value, $("#json-edit"));
       if (act && act.dataset.act === "json-apply") applyJson($("#json-edit").value);
     });
+    // Doppelklick: die ersten beiden Klicks haben den Haken hin und zurück gesetzt
+    view.addEventListener("dblclick", (e) => {
+      const op = e.target.closest("td.op[data-step]");
+      if (op && !e.target.closest(".tmr")) openStep(op.dataset.step);
+    });
     view.addEventListener("keydown", (e) => {
-      if ((e.key === "Enter" || e.key === " ") && e.target.matches("td.op[data-step]")) { e.preventDefault(); openStep(e.target.dataset.step); }
+      if ((e.key === "Enter" || e.key === " ") && e.target.matches("td.op[data-step], .tl-row[data-step]")) {
+        e.preventDefault();
+        setDone(e.target.dataset.step);
+      }
     });
     view.addEventListener("change", (e) => {
       if (e.target.id !== "json-file" || !e.target.files || !e.target.files[0]) return;
@@ -833,7 +902,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
       fr.readAsText(e.target.files[0]);
     });
     $("#below").addEventListener("click", (e) => {
-      const li = e.target.closest("li[data-step]");
+      const li = e.target.closest("ul.lint li[data-step]");
       if (li) openStep(li.dataset.step);
     });
 
@@ -870,6 +939,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     if (!restored) { S.text = SAMPLE; }
     $("#src").value = S.text;
     bind();
+    FK.kitchen.init($("#timers"), { onDone: (id) => setDone(id, true) });
     if (!S.model) { S.model = FK.parse(S.text); S.origin = "local"; S.servings = S.model.servings; }
     setLeft(S.left);
     showMob(S.mob);

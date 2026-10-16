@@ -43,12 +43,46 @@
     return row.portion ? M.scalePortion(row.portion, factor) : M.fmtAmount(row.node, factor);
   }
 
+  // ---- Kochen: abgehakte Schritte, Timer -----------------------------------------------------
+
+  /** Erledigte Schritte, die ausgeblendet werden dürfen: alle Verbraucher und der ganze Ast davor sind erledigt.
+   *  Ein erledigter Schritt, dessen Ergebnis noch gebraucht wird, bleibt als „Spalte davor“ sichtbar. */
+  function collapsible(m, done, idx) {
+    const out = new Set();
+    if (!done || !done.size) return out;
+    idx = idx || M.index(m);
+    const memo = new Map();
+    const branchDone = (s, guard) => {
+      if (memo.has(s.id)) return memo.get(s.id);
+      if (guard.has(s.id)) return false;
+      guard.add(s.id);
+      const ok = done.has(s.id) && s.inputs.every((inp) => { const e = idx.byId.get(inp.ref); return !e || e.kind !== "step" || branchDone(e.node, guard); });
+      memo.set(s.id, ok);
+      return ok;
+    };
+    for (const s of m.steps) {
+      const cons = idx.consumers.get(s.id) || [];
+      if (cons.length && cons.every((c) => done.has(c.step.id)) && branchDone(s, new Set())) out.add(s.id);
+    }
+    return out;
+  }
+
+  /** Dauer als Timer-Knopf (nur in der App) oder als Marke (Druck, Export). */
+  function timeTag(s, opts, cls) {
+    const d = M.durText(s.dur);
+    if (!d) return "";
+    if (!opts || !opts.timers) return '<span class="tag tag-time">' + esc(d) + "</span>";
+    return '<button type="button" class="tag tag-time tmr' + (cls ? " " + cls : "") + '" data-timer="' + attr(s.id) + '" title="Timer starten" aria-label="Timer ' + esc(d) + ' starten">' +
+      '<svg class="ic-t" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="9" r="5.5"/><path d="M8 6v3l2 1.5M6.5 1.5h3"/></svg><span class="tmr-t">' + esc(d) + "</span></button>";
+  }
+
   // ---- Flusskarte (erweitert) ------------------------------------------------------------
 
   function flowCard(m, opts) {
     const factor = factorOf(m, opts.servings);
-    const L = FK.layout.build(m);
     const idx = M.index(m);
+    const done = opts.done || null;
+    const L = FK.layout.build(m, opts.hideDone ? { collapse: collapsible(m, done, idx) } : null);
     const notes = notesOf(m);
     const noteOf = new Map(notes.map((n) => [n.step.id, n.n]));
     if (!L.rows.length) return { html: emptyCard(), layout: L, notes };
@@ -58,14 +92,17 @@
     L.rows.forEach((row, r) => {
       const treeStart = r > 0 && L.rows[r - 1].tree !== row.tree;
       h += "<tr" + (treeStart ? ' class="tree-start"' : "") + ">";
-      h += leafCellsFlow(row, factor);
+      // data-for: Verbraucher der Zeile, damit ein Haken die Zeile ohne Neuaufbau grau färben kann
+      const dn = row.kind !== "done" && done && done.has(row.consumer) ? " done" : "";
+      const dfor = row.kind !== "done" && row.consumer ? ' data-for="' + attr(row.consumer) + '"' : "";
+      h += leafCellsFlow(row, factor).replace(/<td class="(amt|ing)([^"]*)"/g, '<td class="$1$2' + dn + '"' + dfor);
       for (let c = 1; c <= L.cols; c++) {
         const cell = L.grid[r][c - 1];
         if (!cell || cell.r0 !== r || cell.c0 !== c) continue;
         const span = (cell.rows > 1 ? ' rowspan="' + cell.rows + '"' : "") + (cell.cols > 1 ? ' colspan="' + cell.cols + '"' : "");
-        if (cell.type === "fill") h += '<td class="fill"' + span + ' aria-hidden="true"></td>';
+        if (cell.type === "fill") h += '<td class="fill' + (done && done.has(cell.consumer) ? " done" : "") + '" data-for="' + attr(cell.consumer) + '"' + span + ' aria-hidden="true"></td>';
         else if (cell.type === "blank") h += '<td class="blank"' + span + ' aria-hidden="true"></td>';
-        else h += opCellFlow(m, cell, span, idx, noteOf);
+        else h += opCellFlow(m, cell, span, idx, noteOf, opts);
       }
       h += "</tr>";
     });
@@ -75,6 +112,10 @@
 
   function leafCellsFlow(row, factor) {
     const dataRef = row.ref ? ' data-ing="' + attr(row.ref) + '"' : "";
+    if (row.kind === "done") {
+      return '<td class="amt done-row"><span class="chk" aria-hidden="true">✓</span></td><td class="ing done-row" data-step="' + attr(row.step.id) + '" title="Erledigt und ausgeblendet">' +
+        '<span class="nm">' + esc(row.label) + '</span> <span class="sr-only">erledigt</span></td>';
+    }
     if (row.kind === "equipment") {
       return '<td class="amt eq"' + dataRef + '><span class="tag tag-eq">Gerät</span></td><td class="ing eq"' + dataRef + '><span class="nm">' + esc(row.node.name) + "</span>" +
         (row.node.note ? ' <span class="nt">' + esc(row.node.note) + "</span>" : "") + "</td>";
@@ -94,19 +135,22 @@
       (z.note && row.use === 1 ? ' <span class="nt">' + esc(z.note) + "</span>" : "") + total + tags + "</td>";
   }
 
-  function opCellFlow(m, cell, span, idx, noteOf) {
+  function opCellFlow(m, cell, span, idx, noteOf, opts) {
     const s = cell.step;
     const cls = ["op"];
     if (s.passive) cls.push("passive");
+    const isDone = !!(opts.done && opts.done.has(s.id));
+    if (isDone) cls.push("done");
     const t = ovenTemp(m, s, idx);
     let meta = "";
     if (t) meta += '<span class="tag tag-heat' + (t.inherited ? " inh" : "") + '"' + (t.inherited ? ' title="Temperatur des vorgeheizten Ofens"' : "") + ">" + esc(t.temp) + "</span>";
-    const d = M.durText(s.dur);
-    if (d) meta += '<span class="tag tag-time">' + esc(d) + "</span>";
+    meta += timeTag(s, opts);
     if (s.repeat) meta += '<span class="tag tag-rep" title="wiederholen">×' + esc(s.repeat) + "</span>";
     const fn = noteOf.get(s.id);
-    return '<td class="' + cls.join(" ") + '"' + span + ' data-step="' + attr(s.id) + '" tabindex="0" title="Schritt ' + (cell.order + 1) + ' bearbeiten">' +
-      '<div class="op-in"><span class="op-n">' + (cell.order + 1) + "</span>" +
+    const interactive = !!opts.timers;
+    const a11y = interactive ? ' tabindex="0" role="checkbox" aria-checked="' + isDone + '" title="Antippen: abhaken · Doppelklick: bearbeiten"' : "";
+    return '<td class="' + cls.join(" ") + '"' + span + ' data-step="' + attr(s.id) + '"' + a11y + ">" +
+      '<div class="op-in"><span class="op-n">' + (cell.order + 1) + "</span>" + (interactive ? '<span class="op-chk" aria-hidden="true">✓</span>' : "") +
       '<span class="op-v">' + esc(s.verb) + (fn ? '<sup class="fn">' + fn + "</sup>" : "") + "</span>" +
       (s.detail ? '<span class="op-d">' + esc(s.detail) + "</span>" : "") +
       (meta ? '<span class="op-m">' + meta + "</span>" : "") +
@@ -204,7 +248,9 @@
 
   // ---- Zeitplan ----------------------------------------------------------------------------
 
-  function timelineHtml(m) {
+  function timelineHtml(m, opts) {
+    opts = opts || {};
+    const done = opts.done || null;
     const sc = FK.schedule.plan(m);
     if (!sc.items.length) return emptyCard();
     const total = Math.max(sc.total, 1);
@@ -214,8 +260,12 @@
     let rows = "";
     for (const it of sc.items) {
       const left = it.start / total * 100, width = Math.max((it.end - it.start) / total * 100, 0.6);
-      rows += '<div class="tl-row" data-step="' + attr(it.step.id) + '"><div class="tl-label"><span class="op-n">' + (it.order + 1) + "</span> " + esc(it.step.verb) +
-        (it.step.detail ? ' <span class="tl-det">' + esc(it.step.detail) + "</span>" : "") + '</div><div class="tl-track"><div class="tl-bar' + (it.passive ? " passive" : "") + (it.est ? " est" : "") +
+      const isDone = !!(done && done.has(it.step.id));
+      if (isDone && opts.hideDone) continue;
+      const a11y = opts.timers ? ' tabindex="0" role="checkbox" aria-checked="' + isDone + '" title="Antippen: abhaken"' : "";
+      rows += '<div class="tl-row' + (isDone ? " done" : "") + '" data-step="' + attr(it.step.id) + '"' + a11y + '><div class="tl-label">' + (opts.timers ? '<span class="op-chk" aria-hidden="true">✓</span>' : "") +
+        '<span class="tl-txt"><span class="op-n">' + (it.order + 1) + "</span> " + esc(it.step.verb) +
+        (it.step.detail ? ' <span class="tl-det">' + esc(it.step.detail) + "</span>" : "") + "</span>" + (opts.timers ? timeTag(it.step, opts, "sm") : "") + '</div><div class="tl-track"><div class="tl-bar' + (it.passive ? " passive" : "") + (it.est ? " est" : "") +
         '" style="left:' + left.toFixed(3) + "%;width:" + width.toFixed(3) + '%"><span>' + it.start + "–" + it.end + "</span></div></div></div>";
     }
     const stated = m.statedTime ? '<div class="tl-stated">Angabe im Rezept: ' + esc(m.statedTime) + "</div>" : "";
@@ -296,5 +346,5 @@ ol.notes{font-size:13px;color:${c.muted}}`;
     return lines.join("\n");
   }
 
-  FK.render = { esc, flowCard, layerHtml, layerPlans, timelineHtml, originalHtml, notesOf, standaloneHtml, factorOf, plainText };
+  FK.render = { esc, flowCard, collapsible, layerHtml, layerPlans, timelineHtml, originalHtml, notesOf, standaloneHtml, factorOf, plainText };
 })(window.FK = window.FK || {});

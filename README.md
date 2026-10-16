@@ -16,6 +16,8 @@ Web-Editor, der ein normal geschriebenes Rezept in eine tabellarische **Flusskar
 | Teilen | Kopfzeile | Das Rezept als eine Zeile `FK1.…` (deflate-komprimiertes JSON, base64url), wahlweise mit Originaltext. Der Code lässt sich ins Rezeptfeld oder in „Code laden“ einfügen; online gibt es zusätzlich einen Link `…/#fk=FK1.…`. Umbrochene Codes aus Messengern werden wieder zusammengesetzt. |
 | PDF | Kopfzeile | Eigene Druckseite (A4 quer oder hoch) mit Karte, Anmerkungen, Schichtplan, Zeitplan, Prüfung, Original. Die Karte wird auf Seitenbreite oder eine ganze Seite eingepasst; Schwarz-Weiß möglich. Ausgabe über den Druckdialog („Als PDF speichern“), daher scharfer, durchsuchbarer Text. |
 | Darstellung | Kopfzeile, Symbol ◐ | Hell, Dunkel oder automatisch; 11 Farbschemata oder eigene Farben für Linien, Akzent und Hintergrund. Kontraste werden automatisch nachgeregelt. |
+| Kochen | Flusskarte, Zeitplan | Einen Schritt antippen hakt ihn ab; die Zutaten davor werden grau. „Erledigtes ausblenden“ klappt fertige Äste zu einer Zeile „✓ #2 Auflaufform (ausgestrichen)“ ein. Ein erledigter Schritt, dessen Ergebnis ein offener Schritt noch braucht, bleibt sichtbar (die Spalte davor). Haken bleiben pro Browser gespeichert; „Zurücksetzen“ entfernt sie. |
+| Küchentimer | Zeitmarke im Schritt (Karte und Zeitplan) | Antippen startet einen Timer, nochmal antippen hält ihn an. Die Timer stehen unten rechts (auf dem Handy unten) mit Pause, +1 und +5 Minuten. Bei Spannen wie „35–40 min“ klingelt er nach der kürzeren Zeit. Alarm mit Ton, Vibration, ⏰ im Tab-Titel und einer Mitteilung, wenn der Tab im Hintergrund liegt und Mitteilungen erlaubt sind; „Aus + abhaken“ hakt den Schritt gleich ab. Die Endzeit wird gespeichert, ein Timer überlebt also Neuladen. Solange einer läuft, bleibt der Bildschirm an (Wake Lock). |
 | Handy und iPad | – | Unter 960 px Breite schaltet ein Umschalter zwischen Rezept und Karte; die Karte lässt sich verkleinern oder einpassen. Größere Touch-Ziele, 16-px-Felder (kein Zoomen beim Antippen auf iOS), Dialoge als Blatt von unten, sichere Ränder für Notch und Home-Leiste. |
 
 ## Ansichten
@@ -27,7 +29,7 @@ Web-Editor, der ein normal geschriebenes Rezept in eine tabellarische **Flusskar
 | Original | Eingabetext mit markierten Zutaten; Sätze sind mit ihren Schritten verknüpft |
 | JSON | Datenmodell zum Kopieren, Bearbeiten, Laden |
 
-Links lässt sich der Text bearbeiten (die Karte folgt live) oder die Struktur direkt: Zutaten, Geräte, Schritte mit Eingängen und Anteilen. Ein Klick auf einen Schritt in der Karte öffnet ihn im Editor.
+Links lässt sich der Text bearbeiten (die Karte folgt live) oder die Struktur direkt: Zutaten, Geräte, Schritte mit Eingängen und Anteilen. Ein Doppelklick auf einen Schritt in der Karte öffnet ihn im Editor (ein einfacher Klick hakt ab).
 
 ## Was die Flusskarte löst
 
@@ -78,6 +80,7 @@ js/model.js        Mengen, Normalisierung, Prüfung, Namen von Zwischenprodukten
 js/parser.js       Text → Graph (regelbasiert, Deutsch, etwas Englisch)
 js/layout.js       Graph → Tabellenraster (rowspan/colspan, Füllzellen)
 js/schedule.js     Zeitplan für eine Person
+js/kitchen.js      Küchentimer: Leiste, Alarm (Ton, Vibration, Mitteilung), Bildschirm an
 js/render.js       HTML aller Ansichten, Export als eigenständiges HTML
 js/share.js        Rezept-Code FK1.… kodieren, finden, entpacken
 js/ai.js           Prompt für beliebige KI, Antwort einlesen

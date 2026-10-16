@@ -299,7 +299,32 @@ const CASES = [
       t.eq(M.normDur("90 s"), { min: 1.5, max: 1.5 }, "Sekunden kurz");
       t.eq(M.normDur("10 Minuten"), { min: 10, max: 10 }, "Minuten");
     }
-  }
+  },
+  {
+    name: "Kochen: abhaken und Erledigtes ausblenden",
+    text: "Gratin (2 Portionen)\nZutaten\n* 2 Zwiebeln\n* 1 kg Kartoffeln\n* 200 ml Sahne\nZubereitung\n1. Zwiebeln in Ringe schneiden.\n2. Kartoffeln schälen.\n3. Kartoffeln in Scheiben hobeln.\n4. Zwiebeln, Kartoffeln und Sahne in eine Form schichten.\n5. 40 Min. backen.",
+    check(r, t) {
+      const peel = r.step("schälen"), slice = r.step("hobeln"), layer = r.step("schichten"), bake = r.step("backen");
+      t.ok(peel && slice && layer && bake, "Schritte erkannt");
+      if (!peel || !slice || !layer || !bake) return;
+      const ids = (L) => L.cells.filter((c) => c.type === "op").map((c) => c.step.id);
+      // Schälen ist ausblendbar (Hobeln ist erledigt), Hobeln bleibt als Spalte vor dem offenen Schichten
+      const c1 = FK.render.collapsible(r.m, new Set([peel.id, slice.id]));
+      t.eq([...c1], [peel.id], "nur Schälen wird eingeklappt");
+      const L1 = FK.layout.build(r.m, { collapse: c1 });
+      t.ok(!ids(L1).includes(peel.id) && ids(L1).includes(slice.id), "Schälen fehlt, Hobeln bleibt");
+      t.ok(L1.rows.some((x) => x.kind === "done" && x.step === peel), "eine Zeile steht für den eingeklappten Ast");
+      t.ok(!L1.rows.some((x) => x.kind === "ingredient" && x.consumer === peel.id), "die Kartoffel-Zeile des Asts entfällt");
+      // ein offener Schritt im Ast verhindert das Einklappen
+      t.eq([...FK.render.collapsible(r.m, new Set([slice.id, layer.id]))], [], "Hobeln nicht einklappen, solange Schälen offen ist");
+      // alles erledigt: nur das Gericht bleibt sichtbar
+      const all = new Set(r.m.steps.map((x) => x.id));
+      t.eq(ids(FK.layout.build(r.m, { collapse: FK.render.collapsible(r.m, all) })), [bake.id], "nur der letzte Schritt bleibt");
+      const html = FK.render.flowCard(r.m, { servings: 2, done: new Set([peel.id]), timers: true }).html;
+      t.ok(/data-timer="/.test(html) && /class="op done"/.test(html), "Timer-Knopf und Haken in der App");
+      t.ok(!/data-timer=/.test(FK.render.flowCard(r.m, { servings: 2 }).html), "kein Timer-Knopf im Druck");
+    }
+  },
 ];
 
 function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
