@@ -35,14 +35,14 @@
   }
 
   // ---- Ton ------------------------------------------------------------------------------------
-  /** Muss in einem Klick laufen: iOS und Chrome geben Ton erst nach einer Bedienung frei. */
+  /** Muss in einem Klick laufen: Mobile Browser geben Ton erst nach einer Bedienung frei. */
   function unlockAudio() {
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       if (!audio) audio = new AC();
       if (audio.state === "suspended") audio.resume();
-      // stummer Ton, damit iOS den Kontext wirklich freigibt
+      // stummer Ton, damit auch strenge Mobilbrowser den Kontext wirklich freigeben
       const o = audio.createOscillator(), g = audio.createGain();
       g.gain.value = 0; o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + 0.02);
     } catch (e) { audio = null; }
@@ -70,7 +70,7 @@
     if (!("Notification" in window) || Notification.permission !== "granted" || !document.hidden) return;
     const body = t.label + (t.range ? " · " + t.range : "");
     const opts = { body, tag: "fk-" + t.id, renotify: true, requireInteraction: true, icon: "icons/icon-192.png" };
-    const viaPage = () => { try { new Notification("Timer abgelaufen", opts); } catch (e) { /* Android: nur über Service Worker */ } };
+    const viaPage = () => { try { new Notification("Timer abgelaufen", opts); } catch (e) { /* manche Mobilbrowser: nur über Service Worker */ } };
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
       navigator.serviceWorker.ready.then((r) => r.showNotification("Timer abgelaufen", opts)).catch(viaPage);
     } else viaPage();

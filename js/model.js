@@ -108,7 +108,7 @@
   function durText(d) {
     d = normDur(d);
     if (!d) return "";
-    // volle Stunden ab 2 h, sonst beide Werte in Minuten („120–150 min“, nicht „2 h–150 min“); unter 1 min in Sekunden (Thermomix)
+    // volle Stunden ab 2 h, sonst beide Werte in Minuten („120–150 min“, nicht „2 h–150 min“); unter 1 min in Sekunden (Küchenmaschine)
     const hours = d.min >= 120 && d.min % 60 === 0 && d.max % 60 === 0, secs = d.max < 1;
     const f = (m) => (hours ? String(m / 60) : secs ? String(Math.round(m * 60)) : fmtNum(m));
     return (d.est ? "≈ " : "") + (d.min === d.max ? f(d.min) : f(d.min) + "–" + f(d.max)) + (hours ? " h" : secs ? " s" : " min");

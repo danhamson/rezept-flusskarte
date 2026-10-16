@@ -1,5 +1,5 @@
 /* Layout: Arbeitsplatz aus zwei Spalten – links Eingabe, rechts die Karte auf Rasterpapier;
-   unter 960 px (Handy, iPad hochkant) ein Umschalter zwischen Rezept und Karte.
+   unter 960 px (Handy, Tablet hochkant) ein Umschalter zwischen Rezept und Karte.
    Die Farben unten sind der Rückfall ohne JavaScript; js/theme.js überschreibt sie. */
 :root {
   --paper: #f2f5f0;
@@ -398,7 +398,7 @@ label.check input { width: 18px; height: 18px; accent-color: var(--accent); marg
 .picker input[type="color"] { width: 40px; height: 32px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); padding: 2px; cursor: pointer; }
 .picker small { color: var(--muted); font-size: .74rem; margin-left: 2px; }
 
-/* Touch: größere Ziele, 16 px in Feldern (sonst zoomt iOS beim Antippen) */
+/* Touch: größere Ziele, 16 px in Feldern (sonst zoomen manche Mobilbrowser beim Antippen) */
 @media (pointer: coarse) {
   .btn { min-height: 40px; padding: 8px 14px; }
   .btn.sm { min-height: 36px; }

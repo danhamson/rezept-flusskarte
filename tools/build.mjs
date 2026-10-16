@@ -1,6 +1,6 @@
 // Erzeugt index.html aus page.html (dem Seiteninhalt fürs Artefakt) und aktualisiert sw.js.
 // Titel, Meta-Angaben, Stylesheets und js/theme.js am Anfang von page.html wandern in den <head>;
-// dazu kommen Manifest und Icons für „Zum Home-Bildschirm“ auf Handy und iPad.
+// dazu kommen Manifest und Icons für „Zum Home-Bildschirm“ auf Handy und Tablet.
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -43,7 +43,9 @@ console.log("index.html geschrieben");
 
 // Service Worker: Dateiliste und Version aus den tatsächlich eingebundenen Dateien
 const refs = new Set(["./", "index.html", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"]);
-for (const m of page.matchAll(/(?:src|href)="((?:js\/|styles)[^"]+)"/g)) refs.add(m[1]);
+for (const m of page.matchAll(/(?:src|href)="((?:js\/|styles|fonts\/)[^"]+)"/g)) refs.add(m[1]);
+// Schriftdateien, die fonts/fonts.css einbindet
+for (const f of fs.readdirSync(path.join(root, "fonts")).sort()) if (f.endsWith(".woff2")) refs.add("fonts/" + f);
 const assets = [...refs];
 const hash = crypto.createHash("sha256");
 for (const a of assets) {

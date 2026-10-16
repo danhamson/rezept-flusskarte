@@ -106,7 +106,7 @@
     throw err;
   }
 
-  /** Mögliche Codes im Text, längster zuerst: Hat ein Messenger den Code auf mehrere Zeilen
+  /** Mögliche Codes im Text, längster zuerst: Hat eine Chat-App den Code auf mehrere Zeilen
    *  umbrochen, werden Folgezeilen aus reinen Code-Zeichen angehängt. Was davon passt, zeigt das Entpacken. */
   function candidates(text) {
     const s = String(text || "");

@@ -16,24 +16,24 @@
   const ABBR_RE = /\b(ca|z\.\s?B|bzw|evtl|ggf|Min|Std|Pck|Msp|EL|TL|Stk|St|Nr|etc|inkl|max|min|Tbs|tsp|oz|lb|lbs|approx|vgl)\./g;
   const ING_HDR = /^(zutaten|ingredients|einkaufsliste|du brauchst|you need|für (?:den|die|das))\b/i;
   const STEP_HDR = /^(zubereitungsschritte|zubereitungsanleitung|zubereitung|anleitung|so geht'?s|so wird'?s gemacht|arbeitsschritte|schritt für schritt|instructions|directions|method|preparation|steps)\b/i;
-  // Schrittmarke auf eigener Zeile: „Schritt 2/3“ (Kitchen Stories), „Step 1“ (Allrecipes), „step 1“ (BBC)
+  // Schrittmarke auf eigener Zeile: „Schritt 2/3“ (Koch-Apps), „Step 1“, „step 1“ (englische Seiten)
   const STEP_MARK = /^(?:schritt|step)\s*\d+(?:\s*(?:\/|von|of)\s*\d+)?\s*:?$/i;
-  // Geräteliste (HelloFresh, Kitchen Stories, EAT SMARTER, Blogs): keine Zutaten
+  // Geräteliste (Kochboxen, Koch-Apps, Blogs): keine Zutaten
   const EQUIP_HDR = /^(utensilien|kochutensilien|küchenutensilien|küchengeräte|geräte und zubehör|equipment|special equipment)$/i;
   // Anmerkungen nach der Zubereitung (Blogs): werden Hinweise zum fertigen Gericht
   const NOTES_HDR = /^(notes|recipe notes|anmerkungen|hinweise|tipps|tipps zum rezept|tipps und tricks|make-ahead(?: and storage)?|storage|aufbewahrung|variationen|variations)$/i;
   // Was nach dem Rezept kommt (Nährwerte, Kommentare, verwandte Rezepte), wird nicht mehr gelesen.
-  // Steht es davor (HelloFresh, EAT SMARTER: Nährwerte vor der Zubereitung), liest die nächste Überschrift weiter.
+  // Steht es davor (manche Seiten: Nährwerte vor der Zubereitung), liest die nächste Überschrift weiter.
   const END_HDR = /^(nährwerte|nährwertangaben|nährwert|nutrition|was meinst du|kommentare?|rezept bewerten|hast du (?:dieses|das|mein)\b.*ausprobiert|did you make this recipe|ähnliche rezepte|rezeptideen mit ähnlichen zutaten|das gefällt anderen auch|das könnte (?:dir|dich) auch (?:gefallen|interessieren)|weitere rezepte|mehr rezepte|you might also like|more recipes|related recipes|recipe from\b)/i;
   // Kopfangaben von Rezeptseiten; der Wert steht oft in der nächsten Zeile („Vorbereitungszeit“ / „20Minuten Min.“)
   const META_TIME = /^(vorbereitungszeit|zubereitungszeit|arbeitszeit|koch-\s*\/\s*backzeit|kochzeit|backzeit|garzeit|ruhezeit|wartezeit|gesamtzeit|prep time|cook time|total time)\b\s*:?\s*(.*)$/i;
-  // Kurze Bezeichnung nur mit Zeitwert: „Gesamt 35 Min“ (Cookidoo), „Prep: 15 mins“ (BBC), „Zeit: 25 Minuten“
+  // Kurze Bezeichnung nur mit Zeitwert: „Gesamt 35 Min“, „Prep: 15 mins“, „Zeit: 25 Minuten“
   const META_SHORT = /^(vorbereitung|zubereitung|gesamt|zeit|prep|cook|total|active|inactive)\s*:?\s+(.+)$/i;
   const META_TIME_LABEL = { vorbereitungszeit: "Vorbereitung", zubereitungszeit: "Zubereitung", arbeitszeit: "Arbeitszeit", "koch-/backzeit": "Kochen/Backen", kochzeit: "Kochen", backzeit: "Backen", garzeit: "Garen", ruhezeit: "Ruhen", wartezeit: "Warten", gesamtzeit: "gesamt", preptime: "prep", cooktime: "cook", totaltime: "total", vorbereitung: "Vorbereitung", zubereitung: "Zubereitung", gesamt: "gesamt", zeit: "Zeit", prep: "prep", cook: "cook", total: "total", active: "active", inactive: "inactive" };
-  // Zeitwert allein auf einer Zeile; bei Chefkoch steht er vor der Bezeichnung („55 Min.“ / „Gesamtzeit“)
+  // Zeitwert allein auf einer Zeile; manche Rezeptdatenbanken setzen ihn vor die Bezeichnung („55 Min.“ / „Gesamtzeit“)
   const TIME_ONLY = /^(?:ca\.|etwa|about|approx\.?)?\s*\d+(?:[,.]\d+)?\s*(?:minuten|minute|min\.?|mins|minutes|stunden?|std\.?|h|hrs?|hours?)(?:\s*(?:und|and)?\s*\d+\s*(?:minuten|min\.?|mins|minutes))?\.?$/i;
   // Bedienelemente kopierter Rezeptseiten: Knöpfe, Portionsrechner („1/2x“, „Units“), Bewertungen („4,4/5 (47)“)
-  const UI_NOISE = /^(?:bring!.*|.*\bauf die einkaufsliste setzen|eigene kopie erstellen|create|drucken|rezept drucken|print(?: recipe)?|pin(?: recipe)?|pdf|teilen(?:ins kochbuch \d*)?|ins kochbuch(?: \d+)?|merken|rezept speichern|zurück zum kochbuch|einkaufsliste drucken|wie gesund sind die hauptzutaten\??|jump to (?:recipe|nutrition facts)|skip to (?:ingredients|recipe)|cook mode|prevent your screen from going dark|keep the screen awake.*|units(?:\s*:\s*\w+)?|us|metric|imperial|m|scale|\d+(?:\/\d+)?x|original recipe \(\d+x\) yields.*|get recipe ingredients|i made it|rate|freezable|nicht (?:in deiner lieferung|im lieferumfang) enthalten|\d+(?:[,.]\d+)?\s*\/\s*5(?:\s*\(\d+\))?|\(\d+\))$/i;
+  const UI_NOISE = /^(?:.*auf die einkaufsliste setzen|eigene kopie erstellen|create|drucken|rezept drucken|print(?: recipe)?|pin(?: recipe)?|pdf|teilen(?:ins kochbuch \d*)?|ins kochbuch(?: \d+)?|merken|rezept speichern|zurück zum kochbuch|einkaufsliste drucken|wie gesund sind die hauptzutaten\??|jump to (?:recipe|nutrition facts)|skip to (?:ingredients|recipe)|cook mode|prevent your screen from going dark|keep the screen awake.*|units(?:\s*:\s*\w+)?|us|metric|imperial|m|scale|\d+(?:\/\d+)?x|original recipe \(\d+x\) yields.*|get recipe ingredients|i made it|rate|freezable|nicht (?:in deiner lieferung|im lieferumfang) enthalten|\d+(?:[,.]\d+)?\s*\/\s*5(?:\s*\(\d+\))?|\(\d+\))$/i;
   // Nur Hashtags („#pasta #onepot“)
   const HASHTAGS = /^#[^\s#]+(?:\s+#[^\s#]+)*$/;
   // Emojis und Bildzeichen; Aufzählungszeichen, die BULLET_RE kennt, bleiben
@@ -44,13 +44,13 @@
   // Mengenwörter statt Zahl in der Zutatenliste („etwas Muskat“, „n. B. Brühepulver“)
   const QTY_WORD = /^(etwas|viel|wenig|reichlich|n\.\s?b\.|nach bedarf)(?=\s|$)\s*/i;
   const META_OTHER = /^(?:portionen|personen|servings|serves|yield|ergibt|kalorien|kcal|brennwert|schwierigkeit(?:sgrad)?|niveau|difficulty|kategorie|category|cuisine|küche|course|keywords?|diet|author|autor|allergene)\b|^portionsgröße|^method\s*:/i;
-  // Portionen: „4 Portionen“ allein, „Servings:“ / „8“, „2“ / „Portionen“ (Kitchen Stories), „für“ / „4“ / „Portionen“ (EAT SMARTER)
+  // Portionen: „4 Portionen“ allein, „Servings:“ / „8“, „2“ / „Portionen“, „für“ / „4“ / „Portionen“
   const SERV_LINE = /^(?:für\s+)?(\d+)\s*(?:portionen|portion|personen|portions?|servings?)$/i;
   const SERV_LABEL = /^(?:portionen|personen|portionsgröße|servings|serves)$/i;
   const SERV_WORD = /^(?:portionen|personen|portions?|servings?)$/i;
-  // Ofeneinstellung unter „Backofen vorheizen.“ (Dr. Oetker): „Ober-/Unterhitze: etwa 180 °C“
+  // Ofeneinstellung unter „Backofen vorheizen.“ (Backbücher): „Ober-/Unterhitze: etwa 180 °C“
   const OVEN_SET = /^(ober-\s*\/\s*unterhitze|umluft|heißluft|gas(?:herd)?|elektroherd|e-herd)\s*:\s*(.+)$/i;
-  // Mengen für andere Portionsgrößen (HelloFresh-Karte): „1 EL [1,5 EL I 2 EL] Öl“
+  // Mengen für andere Portionsgrößen (Kochbox-Karten): „1 EL [1,5 EL I 2 EL] Öl“
   const SIZE_VARIANTS = /\s*\[[^\]]*(?:\||\sI\s)[^\]]*\]/g;
   const BULLET_RE = /^(?:[*•·\-–]\s+|[▢☐□◻◽▪■○●◦✓✔☑]\s*)/;
   const TIP_RE = /^(?:(?:tipp|tip|hinweis|anmerkung)\b\s*:?|(?:info|achtung|wichtig|note)\s*:)\s*/i;
@@ -60,7 +60,7 @@
   const STIR = new Set(["umrühren", "rühren", "durchrühren", "wenden", "schwenken"]);
   const CHATTER = /\b(guten appetit|viel spaß|lass(?:t)? (?:es )?(?:dir|euch) schmecken|bon app[eé]tit|speicher(?:e|t)? (?:dir |euch )?(?:das|dieses) rezept|folg(?:e|t) (?:mir|uns)|link in (?:der )?bio|save (?:this|the) recipe|follow (?:me|us) for)\b|^enjoy\b/i;
   // Zahl („1,5“, „1½“, „½“), Spanne, Einheit; die Einheit muss als Wort enden („Minzblätter“ ist keine Zeit).
-  // Sekunden für Thermomix-Angaben („5 Sek./Stufe 5“)
+  // Sekunden für Küchenmaschinen-Angaben („5 Sek./Stufe 5“)
   const DUR_NUM = "(\\d+(?:[,.]\\d+)?(?:\\s*[½¼¾])?|[½¼¾])";
   const DUR_RE = new RegExp(DUR_NUM + "(?:\\s*(?:-|–|bis|to)\\s*" + DUR_NUM + ")?\\s*(Minuten|Minute|Min\\.?|mins?|minutes?|Std\\.?|Stunden?|h|hours?|hrs?|Sek\\.?|Sekunden?|secs?|seconds?)(?![A-Za-zÄÖÜäöüß])", "gi");
   const TEMP_RE = /(\d{2,3})\s*(?:°\s*([CF])?|Grad\b(?:\s+(Celsius|Fahrenheit)\b)?)/i;
@@ -223,7 +223,7 @@
         s = s.slice(wm[0].length);
       }
     }
-    // Chefkoch: „Kartoffel(n)“, „Zehe/n“, „m.-große“
+    // Rezeptdatenbanken: „Kartoffel(n)“, „Zehe/n“, „m.-große“
     const plural = !!(qty && qty.max > 1);
     s = s.replace(/([a-zäöüß])(?:\((n|en|e|s|er|nen)\)|\/(n|en|e|s)(?![a-zäöüß]))/g, (_, ch, a, b) => ch + (plural ? a || b : ""))
       .replace(/(^|\s)m\.-\s*(?=gro)/i, "$1mittel");
@@ -243,7 +243,7 @@
     if (ci >= 0) { name = s.slice(0, ci).trim(); note = s.slice(ci + 1).trim(); }
     const fm = name.match(/\s+(für|zum|zur|zu|for)\s+.+$/i);
     if (fm) { note = [fm[0].trim(), note].filter(Boolean).join(", "); name = name.slice(0, fm.index).trim(); }
-    // „Salz/Jodsalz“, „Parmesan/Grana Padano“ (WW): die zweite Angabe ist eine Alternative
+    // „Salz/Jodsalz“, „Parmesan/Grana Padano“: die zweite Angabe ist eine Alternative
     const sl = name.match(/^([A-ZÄÖÜ][\wäöüß-]*)\/([A-ZÄÖÜ].*)$/);
     if (sl) { name = sl[1]; note = [sl[2], note].filter(Boolean).join(", "); }
     const sh = splitHead(name);
@@ -276,11 +276,11 @@
     return !m[1] || lex.UNIT_MAP[m[1].toLowerCase()] ? "strong" : "weak";
   }
 
-  /** Chefkoch und ähnliche Seiten setzen Menge, Zutat und Zusatz in eigene Zeilen
+  /** Manche Rezeptseiten setzen Menge, Zutat und Zusatz in eigene Zeilen
    *  („2 EL“ / „Margarine“, „1 Pck.“ / „Sahne“ / „oder Sojasahne, ca. 200 ml“). Erkannt wird das
    *  an mehreren Zeilen, die nur aus einer Menge bestehen; dann werden die Teile zusammengesetzt.
-   *  Cookidoo und WW stellen den Namen voran („Zwiebel“ / „halbiert“ / „1“, „Knoblauch“ / „1 Zehe(n)“),
-   *  Cookidoo zudem die Einheit in eine eigene Zeile („20“ / „g“). */
+   *  Küchenmaschinen- und Diätseiten stellen den Namen voran („Zwiebel“ / „halbiert“ / „1“, „Knoblauch“ / „1 Zehe(n)“),
+   *  Küchenmaschinen-Seiten zudem die Einheit in eine eigene Zeile („20“ / „g“). */
   function joinSplitLines(texts) {
     const ts = [];
     for (const t of texts.map((x) => x.trim())) {
@@ -374,7 +374,7 @@
     // nur „Zutaten“ selbst; vor „Für die Soße:“ kann schon die erste Zutatenliste stehen
     const firstIng = lines.findIndex((L, i) => /^(zutaten|ingredients|einkaufsliste)\b/i.test(cleans[i]) && isIngHdr(cleans[i], L.text.trim()));
     const nextLine = (i) => { for (let j = i + 1; j < lines.length; j++) if (lines[j].text.trim()) return j; return -1; };
-    // Folgt noch eine echte Überschrift oder Schrittmarke, ist „Zubereitung 10 Min.“ eine Kopfangabe (Kitchen Stories, Cookidoo)
+    // Folgt noch eine echte Überschrift oder Schrittmarke, ist „Zubereitung 10 Min.“ eine Kopfangabe
     const laterSteps = (i) => cleans.some((c, j) => j > i && (STEP_MARK.test(c) || stepHdr(c) === "plain"));
     const timeLabel = (s) => META_TIME_LABEL[s.toLowerCase().replace(/\s+/g, "")] || s;
 
@@ -438,7 +438,7 @@
         mode = null;
       }
       if (UI_NOISE.test(clean) || /^(für|for)$/i.test(clean)) continue;
-      // „Nutrition“ direkt unter „Ingredients“ ist ein Reiter (BBC), kein Ende
+      // „Nutrition“ direkt unter „Ingredients“ ist ein Reiter, kein Ende
       if (END_HDR.test(clean) && clean.length < 80) { if (mode !== "ing" || ingLines.length) mode = "end"; continue; }
       if (isIngHdr(clean, t)) {
         mode = "ing"; metaLabel = null; servingsFrom(clean, model);
@@ -509,7 +509,7 @@
       z._group = gi >= 0 ? ingLines[gi].group || "" : "";
     }
 
-    // Zwischenüberschrift (Dr. Oetker: „Vorbereiten“, „Rührteig zubereiten“): kurz, ohne Zutat, vor einem Absatz
+    // Zwischenüberschrift (Backbücher: „Vorbereiten“, „Rührteig zubereiten“): kurz, ohne Zutat, vor einem Absatz
     const heading = (L, i) => {
       const h = L.text.trim(), nx = stepLines[i + 1] && stepLines[i + 1].text.trim();
       if (h.length > 30 || h.split(/\s+/).length > 3 || /[\d.!?…;,()/]/.test(h) || BULLET_RE.test(h) || !nx || !endsSentence(nx) || nx.length < 30) return false;
@@ -524,7 +524,7 @@
       if (stepLines[i + 1]) numberedNext.add(stepLines[i + 1]);
       return false;
     });
-    // Mit Schrittmarken gehören alle Zeilen bis zur nächsten Marke zum selben Schritt (HelloFresh: ein Satz je Zeile)
+    // Mit Schrittmarken gehören alle Zeilen bis zur nächsten Marke zum selben Schritt (Kochboxen: ein Satz je Zeile)
     const marked = numberedNext.size > 0;
     // Zwischenüberschrift über jedem Absatz („Guss zubereiten“) nennt oft die Zutatengruppe
     const sectionOf = new Map();
@@ -532,7 +532,7 @@
     const st = { model, holder: new Map(), consumed: new Set(), prev: null, pendingNotes: [], equip: new Map(), n: 0, mediumAt: new Map(), medium: new Map(), partial: new Set(), shareUsers: new Set(), section: "", label: "", sentence: "" };
     for (const L of dropCaptions(bodyLines)) {
       st.section = sectionOf.get(L) || "";
-      // „1Aubergine …“: Nummer ohne Punkt direkt am Text (lecker.de)
+      // „1Aubergine …“: Nummer ohne Punkt direkt am Text (Zeitschriften)
       const lead = L.text.match(/^\s*(?:(\d+)\s*[.)]|(\d+)(?=[A-ZÄÖÜ][a-zäöüß])|[*•·\-–▢☐□◻◽▪■○●◦✓✔☑])?\s*/);
       // Fettdruck, Mengen anderer Portionsgrößen und Vorrats-Sternchen gleich lang ausblenden
       const body = L.text.slice(lead[0].length).replace(/\*\*|__/g, "  ").replace(SIZE_VARIANTS, (m) => " ".repeat(m.length)).replace(/(\S)\*(?=[\s,.;:]|$)/g, "$1 ");

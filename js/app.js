@@ -949,7 +949,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
   }
 
   function registerWorker() {
-    // offline nutzbar, wenn über https ausgeliefert (GitHub Pages); lokal und im Artefakt nicht
+    // offline nutzbar, wenn über https ausgeliefert; lokal und im Artefakt nicht
     if (S.inArtifact || location.protocol !== "https:" || !("serviceWorker" in navigator)) return;
     navigator.serviceWorker.register("sw.js").catch(() => { /* ohne Offline-Modus weiter */ });
   }

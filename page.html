@@ -1,9 +1,7 @@
 <title>Rezept-Flusskarte</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="Wandelt normale Rezepte in tabellarische Flusskarten um.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow+Semi+Condensed:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="styles.css">
 <script src="js/theme.js"></script>
 
@@ -64,7 +62,7 @@
           <button type="button" id="btn-ai" class="btn accent"><svg class="ic" aria-hidden="true"><use href="#i-ai"/></svg><span>Mit KI umwandeln</span></button>
         </div>
         <p id="status" class="status" role="status" aria-live="polite"></p>
-        <p class="hint">„Umwandeln“ arbeitet regelbasiert direkt im Browser und aktualisiert die Karte beim Tippen. Für frei formulierte Rezepte erzeugt „Mit KI umwandeln“ einen Prompt für ChatGPT, Gemini, Claude oder jede andere Chat-KI; deren Antwort fügst du wieder ein.</p>
+        <p class="hint">„Umwandeln“ arbeitet regelbasiert direkt im Browser und aktualisiert die Karte beim Tippen. Für frei formulierte Rezepte erzeugt „Mit KI umwandeln“ einen Prompt für eine beliebige Chat-KI; deren Antwort fügst du wieder ein.</p>
       </div>
       <div id="panel-struct" class="panel" role="tabpanel" aria-labelledby="tab-struct" hidden></div>
     </section>
@@ -141,7 +139,7 @@
           <button type="button" id="ai-copy-recipe" class="btn primary">Prompt mit diesem Rezept</button>
           <button type="button" id="ai-copy-generic" class="btn">Nur Formatanleitung</button>
         </div>
-        <p class="hint">Die Formatanleitung eignet sich als dauerhafte Anweisung, etwa für ein eigenes GPT, ein Gem oder ein Claude-Projekt. Danach genügt es, Rezepte zu schicken.</p>
+        <p class="hint">Die Formatanleitung eignet sich als dauerhafte Anweisung, etwa in den Projekt- oder Systemeinstellungen einer Chat-KI. Danach genügt es, Rezepte zu schicken.</p>
         <details class="peek"><summary>Prompt ansehen</summary><textarea id="ai-prompt" class="code" readonly rows="8" aria-label="Prompt"></textarea></details>
       </li>
       <li>
@@ -177,7 +175,7 @@
       </div>
     </fieldset>
     <div class="row"><button type="button" id="pdf-go" class="btn primary">PDF erstellen</button></div>
-    <p class="hint">Es öffnet sich der Druckdialog. Dort als Ziel „Als PDF speichern“ wählen. Auf iPhone und iPad im Druckdialog über das Teilen-Symbol „In Dateien sichern“.</p>
+    <p class="hint">Es öffnet sich der Druckdialog. Dort als Ziel „Als PDF speichern“ wählen. Fehlt diese Option (manche Handys und Tablets), im Druckdialog über das Teilen-Symbol „In Dateien sichern“.</p>
   </div>
 </dialog>
 
