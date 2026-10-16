@@ -225,7 +225,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     if (S.view === "flow") {
       const notes = R.notesOf(m);
       if (notes.length) blocks.push('<section class="box"><h3>Anmerkungen</h3><ol class="notes">' + notes.map((n) => '<li data-step="' + esc(n.step.id) + '">' + esc(n.text) + ' <span class="ref">(Schritt ' + (n.order + 1) + ")</span></li>").join("") + "</ol></section>");
-      const layers = R.layerHtml(m);
+      const layers = R.layerHtml(m, R.factorOf(m, S.servings || m.servings));
       if (layers) blocks.push('<section class="box">' + layers + "</section>");
     }
     blocks.push(lintHtml(m));

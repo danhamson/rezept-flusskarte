@@ -83,7 +83,7 @@ js/share.js        Rezept-Code FK1.… kodieren, finden, entpacken
 js/ai.js           Prompt für beliebige KI, Antwort einlesen
 js/print.js        Druckseite für das PDF, Karte einpassen
 js/app.js          Oberfläche, Editor, Dialoge, Speichern
-tools/check.mjs    Parser, Layout und Zeitplan ohne Browser prüfen
+tools/check.mjs    Regressionstests für Parser, Layout und Zeitplan; mit Datei: Umwandlung ausgeben
 tools/serve.mjs    statischer Vorschau-Server
 tools/icons.mjs    App-Icons erzeugen
 samples/           Beispielrezepte

@@ -35,7 +35,7 @@
     if (o.notes) {
       const notes = R.notesOf(m);
       if (notes.length) extra.push('<section class="pr-box"><h3>Anmerkungen</h3><ol class="notes">' + notes.map((n) => "<li>" + esc(n.text) + ' <span class="ref">(Schritt ' + (n.order + 1) + ")</span></li>").join("") + "</ol></section>");
-      const layers = R.layerHtml(m);
+      const layers = R.layerHtml(m, R.factorOf(m, servings));
       if (layers) extra.push('<section class="pr-box">' + layers + "</section>");
     }
     if (o.lint) {

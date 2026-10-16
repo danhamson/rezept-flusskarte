@@ -81,12 +81,37 @@
     return [q, ing.unit || ""].filter(Boolean).join(" ");
   }
 
+  // Einzahl ↔ Mehrzahl der Einheiten, die in Anteilen vorkommen („1 Zehe“, „2 Zehen“)
+  const UNIT_PLURAL = { zehe: "zehen", scheibe: "scheiben", prise: "prisen", dose: "dosen", tasse: "tassen", zweig: "zweige", stange: "stangen", knolle: "knollen" };
+  const UNIT_SINGULAR = Object.fromEntries(Object.entries(UNIT_PLURAL).map(([a, b]) => [b, a]));
+  const RELATIVE = /^(teil|teile|drittel|hälfte|viertel|achtel|prozent)$/i;
+
+  /** Anteil eines Schritts beim Umrechnen der Portionen: Mengen mit Einheit und ganze Stückzahlen
+   *  („200 g“, „1 Zehe“, „2“) wachsen mit, Bruchteile („½“, „⅔“) und Mengenwörter („Rest“, „etwas“) nicht. */
+  function scalePortion(p, factor) {
+    if (!p || !factor || Math.abs(factor - 1) < 1e-9) return p;
+    const m = String(p).match(new RegExp("^(" + NUM_RE + "(?:\\s*(?:-|–|bis)\\s*" + NUM_RE + ")?)(?![\\d])\\s*(?:([A-Za-zÄÖÜäöüß]+\\.?)(?=[\\s,]|$))?(.*)$"));
+    if (!m) return p;
+    const q = parseQty(m[1]);
+    if (!q) return p;
+    const word = m[2] || "", rest = m[3] || "";
+    const canon = word ? lex.UNIT_MAP[word.toLowerCase()] : "";
+    if (word && (!canon || RELATIVE.test(word))) return p;
+    if (!word && (q.min < 1 || rest.trim() && !/^\s*,/.test(rest))) return p;
+    let unit = word;
+    const lw = word.toLowerCase(), big = q.max * factor > 1 + 1e-9;
+    const swap = big ? UNIT_PLURAL[lw] : UNIT_SINGULAR[lw];
+    if (swap) unit = word[0] === word[0].toUpperCase() ? swap[0].toUpperCase() + swap.slice(1) : swap;
+    return fmtQty(q, factor, canon) + (unit ? " " + unit : "") + rest;
+  }
+
   function durText(d) {
     d = normDur(d);
     if (!d) return "";
-    const f = (m) => (m >= 120 && m % 60 === 0 ? m / 60 + " h" : fmtNum(m) + "");
-    const unit = d.min >= 120 && d.min % 60 === 0 && d.max % 60 === 0 ? "" : " min";
-    return (d.est ? "≈ " : "") + (d.min === d.max ? f(d.min) : f(d.min) + "–" + f(d.max)) + unit;
+    // volle Stunden ab 2 h, sonst beide Werte in Minuten („120–150 min“, nicht „2 h–150 min“)
+    const hours = d.min >= 120 && d.min % 60 === 0 && d.max % 60 === 0;
+    const f = (m) => (hours ? String(m / 60) : fmtNum(m));
+    return (d.est ? "≈ " : "") + (d.min === d.max ? f(d.min) : f(d.min) + "–" + f(d.max)) + (hours ? " h" : " min");
   }
 
   function normDur(d) {
@@ -332,5 +357,5 @@
     return prefix + i;
   }
 
-  FK.model = { parseQty, normQty, fmtNum, fmtQty, fmtAmount, durText, normDur, stem, keysFor, tokenMatchesKey, emptyModel, normalize, index, productLabel, refLabel, participle, lint, hasCycle, newId, NUM_RE };
+  FK.model = { parseQty, normQty, fmtNum, fmtQty, fmtAmount, scalePortion, durText, normDur, stem, keysFor, tokenMatchesKey, emptyModel, normalize, index, productLabel, refLabel, participle, lint, hasCycle, newId, NUM_RE };
 })(window.FK = window.FK || {});

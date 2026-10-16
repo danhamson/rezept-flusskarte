@@ -61,13 +61,31 @@
     else { du = stem + "st"; er = stem + "t"; }
     return [du, er];
   }
+  // Befehlsform (du): „Verquirle“, „Rühr“, „Gib“, „Schmilz“. Gilt nur am Anfang eines Satzteils (siehe findVerb).
+  const IMP_STRONG = { geben: ["gib"], nehmen: ["nimm"], schmelzen: ["schmilz"], stechen: ["stich"] };
+  function imperative(inf) {
+    if (IMP_STRONG[inf]) return IMP_STRONG[inf];
+    const stem = /e[lr]n$/.test(inf) ? inf.slice(0, -1) : /en$/.test(inf) ? inf.slice(0, -2) : "";
+    if (stem.length < 2) return [];
+    const out = [stem + "e"];
+    if (/e[lr]$/.test(stem)) out.push(stem.slice(0, -2) + stem.slice(-1) + "e"); // würfle
+    // ohne -e nur, wo es gesprochen wird und nicht zu kurz ist („rühr“, nicht „schneid“, „gar“)
+    // und nicht bei -eln/-ern: „pfeffer“, „würfel“ sind Substantive
+    if (stem.length >= 4 && !/[dt]$|[^aeiouäöülrhmn][mn]$|e[lr]$/.test(stem)) out.push(stem);
+    return out;
+  }
   const FINITE = {};
   for (const inf of Object.keys(V)) {
     if (V[inf].en || inf.includes(" ")) continue;
-    const add = (form, particle) => (FINITE[form] = FINITE[form] || []).push({ inf, particle });
-    if (!NO_FINITE.has(inf)) for (const f of conjugate(inf)) add(f, "");
+    const add = (form, particle, imp) => (FINITE[form] = FINITE[form] || []).push({ inf, particle, imp: !!imp });
+    const forms = (base, particle) => {
+      if (NO_FINITE.has(base)) return;
+      for (const f of conjugate(base)) add(f, particle);
+      for (const f of imperative(base)) add(f, particle, true);
+    };
+    forms(inf, "");
     const p = PARTICLES.find((x) => inf.startsWith(x) && inf.length - x.length >= 5);
-    if (p && !NO_FINITE.has(inf.slice(p.length))) for (const f of conjugate(inf.slice(p.length))) add(f, p);
+    if (p) forms(inf.slice(p.length), p);
   }
 
   // Wartezeiten: Hände frei

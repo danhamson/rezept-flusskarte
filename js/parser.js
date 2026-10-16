@@ -29,8 +29,10 @@
   const OCCASIONAL = /\b(ab und zu|hin und wieder|gelegentlich|immer wieder|zwischendurch|regelmäßig|öfter|öfters)\b/i;
   const STIR = new Set(["umrühren", "rühren", "durchrühren", "wenden", "schwenken"]);
   const CHATTER = /\b(guten appetit|viel spaß|lass(?:t)? (?:es )?(?:dir|euch) schmecken|bon app[eé]tit)\b/i;
-  const DUR_RE = /(\d+(?:[,.]\d+)?)(?:\s*(?:-|–|bis|to)\s*(\d+(?:[,.]\d+)?))?\s*(Min(?:uten|\.)?|min\b|mins?\b|minutes?|Std\.?|Stunden?|h\b|hours?|hrs?)/i;
-  const TEMP_RE = /(\d{2,3})\s*°\s*([CF])?/;
+  // Zahl („1,5“, „1½“, „½“), Spanne, Einheit; die Einheit muss als Wort enden („Minzblätter“ ist keine Zeit)
+  const DUR_NUM = "(\\d+(?:[,.]\\d+)?(?:\\s*[½¼¾])?|[½¼¾])";
+  const DUR_RE = new RegExp(DUR_NUM + "(?:\\s*(?:-|–|bis|to)\\s*" + DUR_NUM + ")?\\s*(Minuten|Minute|Min\\.?|mins?|minutes?|Std\\.?|Stunden?|h|hours?|hrs?)(?![A-Za-zÄÖÜäöüß])", "gi");
+  const TEMP_RE = /(\d{2,3})\s*(?:°\s*([CF])?|Grad\b(?:\s+(Celsius|Fahrenheit)\b)?)/i;
   const PRODUCT_PIECES = ["ringe", "ringen", "scheiben", "würfel", "streifen", "stifte", "spalten", "mischung", "masse", "soße", "sauce", "creme", "teig", "püree"];
   const NUMBER_WORDS = { ein: 1, eine: 1, einen: 1, einem: 1, einer: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, a: 1, an: 1, one: 1, two: 2, three: 3 };
 
@@ -41,6 +43,7 @@
 
   // Infinitive, die keine Kochhandlung sind
   const AUX = /^(ist|sind|wird|werden|wurde|wurden|hat|haben|sein)$/;
+  const LEAD_ADV = /^(und|dann|danach|anschließend|nun|jetzt|zuerst|zunächst|erst|zuletzt|zum|schluss|schließlich|nochmals|nochmal|außerdem|inzwischen|währenddessen|nebenbei|sofort|gleich|bitte)$/;
   const NOT_VERBS = new Set("werden,sollen,sollten,können,müssen,haben,lassen,wollen,dürfen,mögen,bedecken,schmecken,aussehen,bleiben,kosten,gelingen,passen,reichen,stehen,liegen,geben,nehmen,machen,brauchen,verwenden,benötigen".split(","));
 
   /** Unbekanntes Verb raten: kleingeschriebener Infinitiv am Ende des Satzteils. */
@@ -65,8 +68,11 @@
       if (!lower && k !== 0) return; // großgeschrieben mitten im Satz → Substantiv
       const e = lex.V[t.lw];
       if (e) { cands.push({ k, key: t.lw, e }); return; }
-      const forms = lex.FINITE[t.lw];
-      if (!forms) return;
+      // Befehlsform nur am Anfang des Satzteils („Gib …“, „Dann rühre …“), sonst Substantiv oder Adjektiv
+      // und nie als einzelnes Wort oder als Lebensmittel („Salz“ ist nicht „salz!“)
+      const imperativeOk = k < ws.length - 1 && !lex.FOODS.includes(t.lw) && ws.slice(0, k).every((w) => LEAD_ADV.test(w.lw));
+      const forms = (lex.FINITE[t.lw] || []).filter((f) => !f.imp || imperativeOk);
+      if (!forms.length) return;
       // Partizip statt gebeugter Form: „sobald alles vermischt ist“, „wird kurz erhitzt“
       if ((ws[k + 1] && AUX.test(ws[k + 1].lw)) || (k === ws.length - 1 && ws.some((w) => AUX.test(w.lw)))) return;
       const sep = tail && tail.i > t.i ? forms.find((f) => f.particle === tail.lw) : null;
@@ -523,7 +529,7 @@
         if (!re.global) break;
       }
     };
-    take(/\((\d{2,3})\s*°\s*C?\s*(Umluft|Heißluft)\)/gi, (m) => "(" + m[2] + " " + m[1] + " °C)", true);
+    take(/\((\d{2,3})\s*(?:°\s*C?|Grad)\s*(Umluft|Heißluft)\)/gi, (m) => "(" + m[2] + " " + m[1] + " °C)", true);
     take(/\d+(?:[,.]\d+)?\s*(?:[-–]\s*\d+(?:[,.]\d+)?)?\s*(?:mm|cm)\b(?!\s*[×x])/gi);
     // „Bauchspeck-Würfel“ ist eine Zutat, keine Schnittform
     take(/(?<!-)\b(?:(?:sehr|ganz)\s+)?(?:(?:dünne|dünnen|dicke|dicken|feine|feinen|grobe|groben|kleine|kleinen|große|großen|gleichmäßige|mundgerechte)\s+)?(?:Scheiben|Ringe|Halbringe|Würfel|Streifen|Stifte|Spalten|Stücke|Röschen|wedges|slices|cubes|rings)\b/g);
@@ -541,6 +547,27 @@
     return out.replace(/(\d)\s*-\s*(\d)/g, "$1–$2");
   }
 
+  /** Erste Zeitangabe im Text in Minuten; „1 Std. 30 Min.“ und „1 Stunde und 30 Minuten“ zählen zusammen. */
+  function durationIn(text) {
+    DUR_RE.lastIndex = 0;
+    const m = DUR_RE.exec(text);
+    if (!m) return null;
+    const val = (s) => (M.parseQty(s.replace(/\s+/g, "")) || {}).min;
+    const hours = /^(std|stunde|h|hour|hr)/i.test(m[3]);
+    let a = val(m[1]), b = m[2] ? val(m[2]) : a;
+    if (a == null || b == null) return null;
+    if (hours) {
+      a *= 60; b *= 60;
+      // Minuten direkt dahinter gehören dazu, aber nicht zu einer Spanne („1-2 Std.“)
+      const n = DUR_RE.exec(text);
+      if (!m[2] && n && !n[2] && !/^(std|stunde|h|hour|hr)/i.test(n[3]) && /^\s*(?:und\s+|and\s+)?$/i.test(text.slice(m.index + m[0].length, n.index))) {
+        const extra = val(n[1]);
+        if (extra != null) { a += extra; b += extra; }
+      }
+    }
+    return { min: a, max: b };
+  }
+
   // ---- Handlung → Schritt -------------------------------------------------------------
 
   function equipNode(st, mention) {
@@ -550,6 +577,16 @@
       st.model.equipment.push(g);
     } else if (!g.note && mention.note) g.note = mention.note;
     return g;
+  }
+
+  /** true, wenn ref gleich target ist oder target in ref eingeflossen ist. */
+  function reaches(model, ref, target, seen) {
+    if (ref === target) return true;
+    seen = seen || new Set();
+    if (seen.has(ref)) return false;
+    seen.add(ref);
+    const s = model.steps.find((x) => x.id === ref);
+    return !!s && s.inputs.some((x) => reaches(model, x.ref, target, seen));
   }
 
   function currentDish(st, exclude) {
@@ -573,14 +610,11 @@
       srcRange: [info.absStart, info.absStart + (info.src || body).length]
     };
 
-    const dm = body.match(DUR_RE);
-    if (dm) {
-      let a = parseFloat(dm[1].replace(",", ".")), b = dm[2] ? parseFloat(dm[2].replace(",", ".")) : a;
-      if (/^(std|stunde|h|hour|hr)/i.test(dm[3])) { a *= 60; b *= 60; }
-      step.dur = { min: a, max: b };
-    }
+    step.dur = durationIn(body);
+    // \b greift vor „ü“ nicht (kein Wortzeichen in JS-Regex ohne u-Flag)
+    if (!step.dur && /(?:^|\s)(über Nacht|overnight)\b/i.test(body)) step.dur = { min: 480, max: 720, est: true };
     const tm = body.match(TEMP_RE);
-    if (tm) step.temp = tm[1] + " °" + (tm[2] || "C").toUpperCase();
+    if (tm) step.temp = tm[1] + " °" + (tm[2] || (tm[3] ? tm[3][0] : "C")).toUpperCase();
     step.detail = extractDetail(body);
 
     // Wortbereiche des Verbs nicht als Zutat lesen
@@ -677,8 +711,15 @@
     }
     if (lex.OVEN.has(verb.key) || coverWithTime || (ovenMention && verb.cls !== "equip")) {
       const oh = st.holder.get("eq:Ofen");
-      if (oh && !st.consumed.has(oh) && oh !== step.id && !inputs.some((x) => x.ref === oh)) inputs.push({ ref: oh, portion: "" });
+      const ohStep = oh && oh !== step.id ? model.steps.find((x) => x.id === oh) : null;
+      if (ohStep && !inputs.some((x) => x.ref === oh)) {
+        const ohIsPrep = ((lex.V[String(ohStep.verb).split(" ")[0]] || {}).cls) === "equip";
+        if (ohIsPrep && !st.consumed.has(oh)) inputs.push({ ref: oh, portion: "" });
+        // Im Ofen steckt schon ein anderes Gericht: nicht damit verschmelzen, nur den vorgeheizten Ofen mitbenutzen
+        else if (!ohIsPrep && st.ovenPrep && !inputs.some((x) => reaches(model, x.ref, oh)) && !inputs.some((x) => x.ref === st.ovenPrep)) inputs.push({ ref: st.ovenPrep, portion: "" });
+      }
     }
+    if (inputs.some((x) => { const g = model.equipment.find((e) => e.id === x.ref); return g && g.canon === "Ofen"; })) st.ovenPrep = step.id;
 
     step.inputs = inputs;
     model.steps.push(step);
@@ -697,5 +738,5 @@
   }
 
   FK.parse = parse;
-  FK.parser = { parse, parseIngredientLine, findVerb, extractDetail };
+  FK.parser = { parse, parseIngredientLine, findVerb, extractDetail, durationIn };
 })(window.FK = window.FK || {});

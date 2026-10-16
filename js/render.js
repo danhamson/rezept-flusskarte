@@ -40,7 +40,7 @@
 
   function leafAmount(row, factor) {
     if (row.kind !== "ingredient") return "";
-    return row.portion || M.fmtAmount(row.node, factor);
+    return row.portion ? M.scalePortion(row.portion, factor) : M.fmtAmount(row.node, factor);
   }
 
   // ---- Flusskarte (erweitert) ------------------------------------------------------------
@@ -80,7 +80,7 @@
         (row.node.note ? ' <span class="nt">' + esc(row.node.note) + "</span>" : "") + "</td>";
     }
     if (row.kind === "ref") {
-      return '<td class="amt ref">' + esc(row.portion) + '</td><td class="ing ref" data-step="' + attr(row.step.id) + '"><span class="nm">' + esc(row.label) + "</span></td>";
+      return '<td class="amt ref">' + esc(M.scalePortion(row.portion, factor)) + '</td><td class="ing ref" data-step="' + attr(row.step.id) + '"><span class="nm">' + esc(row.label) + "</span></td>";
     }
     if (row.kind !== "ingredient") return '<td class="amt"></td><td class="ing"></td>';
     const z = row.node;
@@ -178,8 +178,9 @@
     return plans;
   }
 
-  function layerHtml(m) {
+  function layerHtml(m, factor) {
     const plans = layerPlans(m);
+    const layerLi = (l, color, where) => layerItem(l, color, where, factor);
     if (!plans.length) return "";
     const colors = new Map();
     const colorFor = (id) => { if (!colors.has(id)) colors.set(id, (colors.size % 6) + 1); return colors.get(id); };
@@ -196,9 +197,9 @@
     return h;
   }
 
-  function layerLi(l, color, where) {
+  function layerItem(l, color, where, factor) {
     return '<li data-ing="' + attr(l.ingredient || l.ref) + '"><span class="sw sw-' + color + '"></span><span class="lt">' + esc(l.text) + "</span>" +
-      (l.portion ? '<span class="lp">' + esc(l.portion) + "</span>" : where ? '<span class="lp">' + where + "</span>" : "") + "</li>";
+      (l.portion ? '<span class="lp">' + esc(M.scalePortion(l.portion, factor)) + "</span>" : where ? '<span class="lp">' + where + "</span>" : "") + "</li>";
   }
 
   // ---- Zeitplan ----------------------------------------------------------------------------
