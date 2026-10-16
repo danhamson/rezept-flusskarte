@@ -4,8 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- erzeugt von tools/build.mjs aus page.html – nicht von Hand bearbeiten -->
-</head>
-<body>
 <title>Rezept-Flusskarte</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="Wandelt normale Rezepte in tabellarische Flusskarten um.">
@@ -13,6 +11,24 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow+Semi+Condensed:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
 <link rel="stylesheet" href="styles.css">
+<script src="js/theme.js"></script>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Flusskarte">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+  <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M6 3h8l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v5h5M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></symbol>
+  <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17Z" fill="currentColor"/></symbol>
+  <symbol id="i-ai" viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8Z"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8Z"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+</svg>
 
 <div class="app">
   <header class="top">
@@ -27,28 +43,42 @@
         <input id="sv" type="number" min="1" max="99" step="1" inputmode="numeric" aria-label="Portionen">
         <button type="button" id="sv-plus" class="icon-btn" aria-label="Eine Portion mehr">+</button>
       </div>
-      <button type="button" id="btn-sample" class="btn ghost">Beispiel laden</button>
-      <button type="button" id="btn-export-json" class="btn">JSON speichern</button>
-      <button type="button" id="btn-export-html" class="btn">Karte speichern</button>
+      <button type="button" id="btn-share" class="btn" aria-label="Teilen"><svg class="ic" aria-hidden="true"><use href="#i-share"/></svg><span class="hide-xs">Teilen</span></button>
+      <button type="button" id="btn-pdf" class="btn" aria-label="PDF"><svg class="ic" aria-hidden="true"><use href="#i-pdf"/></svg><span class="hide-xs">PDF</span></button>
+      <div class="menu">
+        <button type="button" id="btn-more" class="btn" aria-haspopup="true" aria-expanded="false" aria-controls="menu-more" aria-label="Mehr"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg><span class="hide-sm">Mehr</span></button>
+        <div id="menu-more" class="menu-pop" role="menu" hidden>
+          <button type="button" role="menuitem" data-menu="ai">Mit KI umwandeln …</button>
+          <button type="button" role="menuitem" data-menu="sample">Beispiel laden</button>
+          <hr>
+          <button type="button" role="menuitem" data-menu="json">JSON speichern</button>
+          <button type="button" role="menuitem" data-menu="html" id="menu-html">Karte als HTML speichern</button>
+        </div>
+      </div>
+      <button type="button" id="btn-theme" class="btn icon-only" aria-label="Darstellung und Farben"><svg class="ic" aria-hidden="true"><use href="#i-theme"/></svg></button>
     </div>
   </header>
 
-  <main class="work">
+  <nav class="mob-switch" aria-label="Bereich">
+    <button type="button" data-mob="in" aria-pressed="true">Rezept</button>
+    <button type="button" data-mob="out" aria-pressed="false">Karte</button>
+  </nav>
+
+  <main class="work" data-mob="in">
     <section class="pane pane-in" aria-label="Eingabe">
       <div class="tabs" role="tablist" aria-label="Eingabe">
         <button type="button" role="tab" id="tab-text" data-left="text" aria-selected="true">Rezepttext</button>
         <button type="button" role="tab" id="tab-struct" data-left="struct" aria-selected="false">Struktur bearbeiten</button>
       </div>
       <div id="panel-text" class="panel" role="tabpanel" aria-labelledby="tab-text">
-        <label for="src" class="lbl">Rezept einfügen: Titel, Zutatenliste, nummerierte Schritte</label>
+        <label for="src" class="lbl">Rezept einfügen: Titel, Zutatenliste, nummerierte Schritte. Ein Rezept-Code geht auch.</label>
         <textarea id="src" spellcheck="false" rows="22"></textarea>
         <div class="row">
           <button type="button" id="btn-local" class="btn primary">Umwandeln</button>
-          <button type="button" id="btn-claude" class="btn accent" hidden>Mit Claude umwandeln</button>
-          <button type="button" id="btn-stop" class="btn ghost" hidden>Stopp</button>
+          <button type="button" id="btn-ai" class="btn accent"><svg class="ic" aria-hidden="true"><use href="#i-ai"/></svg><span>Mit KI umwandeln</span></button>
         </div>
         <p id="status" class="status" role="status" aria-live="polite"></p>
-        <p class="hint" id="convert-hint">Umwandeln arbeitet regelbasiert direkt im Browser und aktualisiert die Karte beim Tippen.</p>
+        <p class="hint">„Umwandeln“ arbeitet regelbasiert direkt im Browser und aktualisiert die Karte beim Tippen. Für frei formulierte Rezepte erzeugt „Mit KI umwandeln“ einen Prompt für ChatGPT, Gemini, Claude oder jede andere Chat-KI; deren Antwort fügst du wieder ein.</p>
       </div>
       <div id="panel-struct" class="panel" role="tabpanel" aria-labelledby="tab-struct" hidden></div>
     </section>
@@ -94,14 +124,92 @@
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </div>
 
+<dialog id="dlg-share" class="sheet" aria-labelledby="dlg-share-h">
+  <div class="sheet-head"><h2 id="dlg-share-h">Rezept teilen</h2><button type="button" class="icon-btn" data-close aria-label="Schließen"><svg class="ic" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+  <div class="sheet-body">
+    <p class="lead">Das ganze Rezept steckt in einem Code. Füge ihn in eine Nachricht, Notiz oder E-Mail ein; hier eingefügt wird daraus wieder die Karte.</p>
+    <label class="check" for="share-src"><input type="checkbox" id="share-src" checked> Originaltext mitnehmen</label>
+    <textarea id="share-code" class="code" readonly rows="4" aria-label="Rezept-Code"></textarea>
+    <p class="meta" id="share-size"></p>
+    <div class="row">
+      <button type="button" id="share-copy" class="btn primary">Code kopieren</button>
+      <button type="button" id="share-link" class="btn">Link kopieren</button>
+      <button type="button" id="share-native" class="btn" hidden>Teilen …</button>
+    </div>
+    <h3 class="sub">Code laden</h3>
+    <textarea id="share-in" class="code" rows="3" placeholder="FK1.… oder Link mit #fk=… einfügen" aria-label="Rezept-Code einfügen"></textarea>
+    <div class="row"><button type="button" id="share-load" class="btn">Laden</button></div>
+    <p id="share-err" class="json-err" role="alert"></p>
+  </div>
+</dialog>
+
+<dialog id="dlg-ai" class="sheet" aria-labelledby="dlg-ai-h">
+  <div class="sheet-head"><h2 id="dlg-ai-h">Mit KI umwandeln</h2><button type="button" class="icon-btn" data-close aria-label="Schließen"><svg class="ic" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+  <div class="sheet-body">
+    <p class="lead">Die App schickt nichts an eine KI. Du kopierst einen Prompt in die Chat-KI deiner Wahl und fügst deren Antwort hier ein.</p>
+    <ol class="how">
+      <li>
+        <b>Prompt kopieren</b> und in die KI einfügen.
+        <div class="row">
+          <button type="button" id="ai-copy-recipe" class="btn primary">Prompt mit diesem Rezept</button>
+          <button type="button" id="ai-copy-generic" class="btn">Nur Formatanleitung</button>
+        </div>
+        <p class="hint">Die Formatanleitung eignet sich als dauerhafte Anweisung, etwa für ein eigenes GPT, ein Gem oder ein Claude-Projekt. Danach genügt es, Rezepte zu schicken.</p>
+        <details class="peek"><summary>Prompt ansehen</summary><textarea id="ai-prompt" class="code" readonly rows="8" aria-label="Prompt"></textarea></details>
+      </li>
+      <li>
+        <b>Antwort einfügen:</b> die komplette Antwort der KI, Codeblock und Begleittext dürfen dabei sein.
+        <textarea id="ai-answer" class="code" rows="6" placeholder="```json&#10;{ &quot;format&quot;: &quot;flusskarte/1&quot;, … }&#10;```" aria-label="Antwort der KI"></textarea>
+        <div class="row"><button type="button" id="ai-apply" class="btn primary">Karte übernehmen</button></div>
+        <p id="ai-err" class="json-err" role="alert"></p>
+      </li>
+    </ol>
+  </div>
+</dialog>
+
+<dialog id="dlg-pdf" class="sheet" aria-labelledby="dlg-pdf-h">
+  <div class="sheet-head"><h2 id="dlg-pdf-h">PDF erstellen</h2><button type="button" class="icon-btn" data-close aria-label="Schließen"><svg class="ic" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+  <div class="sheet-body">
+    <fieldset class="fs"><legend>Inhalt</legend>
+      <div class="checks">
+        <label class="check" for="pdf-card"><input type="checkbox" id="pdf-card" data-opt="card"> Flusskarte</label>
+        <label class="check" for="pdf-notes"><input type="checkbox" id="pdf-notes" data-opt="notes"> Anmerkungen und Schichtplan</label>
+        <label class="check" for="pdf-timeline"><input type="checkbox" id="pdf-timeline" data-opt="timeline"> Zeitplan</label>
+        <label class="check" for="pdf-lint"><input type="checkbox" id="pdf-lint" data-opt="lint"> Prüfung des Rezepts</label>
+        <label class="check" for="pdf-original"><input type="checkbox" id="pdf-original" data-opt="original"> Originalrezept</label>
+      </div>
+    </fieldset>
+    <fieldset class="fs"><legend>Seite</legend>
+      <div class="seg" role="group" aria-label="Ausrichtung">
+        <button type="button" data-orient="landscape" aria-pressed="true">A4 quer</button>
+        <button type="button" data-orient="portrait" aria-pressed="false">A4 hoch</button>
+      </div>
+      <div class="checks">
+        <label class="check" for="pdf-fit"><input type="checkbox" id="pdf-fit" data-opt="fit"> Karte auf eine Seite einpassen</label>
+        <label class="check" for="pdf-bw"><input type="checkbox" id="pdf-bw" data-opt="bw"> Schwarz-Weiß</label>
+      </div>
+    </fieldset>
+    <div class="row"><button type="button" id="pdf-go" class="btn primary">PDF erstellen</button></div>
+    <p class="hint">Es öffnet sich der Druckdialog. Dort als Ziel „Als PDF speichern“ wählen. Auf iPhone und iPad im Druckdialog über das Teilen-Symbol „In Dateien sichern“.</p>
+  </div>
+</dialog>
+
+<dialog id="dlg-theme" class="sheet" aria-labelledby="dlg-theme-h">
+  <div class="sheet-head"><h2 id="dlg-theme-h">Darstellung</h2><button type="button" class="icon-btn" data-close aria-label="Schließen"><svg class="ic" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+  <div class="sheet-body" id="theme-body"></div>
+</dialog>
+
+<div id="print-root" aria-hidden="true"></div>
+
 <script src="js/lexicon.js"></script>
 <script src="js/model.js"></script>
 <script src="js/parser.js"></script>
 <script src="js/layout.js"></script>
 <script src="js/schedule.js"></script>
 <script src="js/render.js"></script>
-<script src="js/claude.js"></script>
+<script src="js/share.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/print.js"></script>
 <script src="js/app.js"></script>
-
 </body>
 </html>

@@ -191,7 +191,7 @@
     // ungültige Verweise entfernen (unbekannt oder auf sich selbst)
     const ids = new Set([...m.ingredients, ...m.equipment, ...m.steps].map((x) => x.id));
     for (const s of m.steps) s.inputs = s.inputs.filter((x) => x.ref && ids.has(x.ref) && x.ref !== s.id);
-    m.lint = (Array.isArray(raw.lint) ? raw.lint : []).map((l) => (typeof l === "string" ? { level: "info", text: l, origin: "claude" } : { level: str(l.level) || "info", text: str(l.text), origin: str(l.origin) })).filter((l) => l.text);
+    m.lint = (Array.isArray(raw.lint) ? raw.lint : []).map((l) => (typeof l === "string" ? { level: "info", text: l, origin: "ai" } : { level: str(l.level) || "info", text: str(l.text), origin: str(l.origin) })).filter((l) => l.text);
     return m;
   }
 

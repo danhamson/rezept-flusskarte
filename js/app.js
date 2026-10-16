@@ -1,4 +1,4 @@
-/* Flusskarte – Oberfläche: Eingabe, Ansichten, Struktur-Editor, Export, Claude. */
+/* Flusskarte – Oberfläche: Eingabe, Ansichten, Struktur-Editor, Export, Teilen, KI-Prompt, PDF. */
 (function (FK) {
   "use strict";
   const M = FK.model, R = FK.render, esc = FK.render.esc;
@@ -31,8 +31,14 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
 8. 5-10 Min. ruhen lassen, dann schneiden.`;
 
   const STORE = "flusskarte.v1";
-  const ORIGIN_LABEL = { local: "lokal umgewandelt", claude: "von Claude umgewandelt", manual: "von Hand bearbeitet", import: "aus JSON geladen" };
-  const S = { text: "", model: null, origin: "local", view: "flow", left: "text", servings: null, staleText: false, claude: null, downloads: null, ctl: null, inArtifact: !!(window.claude && window.claude.use) };
+  const ORIGIN_LABEL = { local: "lokal umgewandelt", ai: "von KI umgewandelt", manual: "von Hand bearbeitet", import: "aus JSON geladen", code: "aus Rezept-Code geladen" };
+  const ZOOMS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.15, 1.3, 1.5];
+  const S = {
+    text: "", model: null, origin: "local", view: "flow", left: "text", servings: null, staleText: false,
+    mob: "in", zoom: 1, pdf: Object.assign({}, FK.print.DEFAULTS), shareSrc: true,
+    downloads: null, inArtifact: !!(window.claude && window.claude.use)
+  };
+  const narrow = () => matchMedia("(max-width: 959.98px)").matches;
 
   // ---- Speicher (nur Bequemlichkeit, pro Browser) ----------------------------------------
   function load() {
@@ -44,11 +50,15 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
       S.text = d.text;
       S.model = d.model ? M.normalize(d.model) : null;
       if (S.model && d.model) S.model.source = d.model.source || d.text;
-      S.origin = ORIGIN_LABEL[d.origin] ? d.origin : "local";
+      S.origin = d.origin === "claude" ? "ai" : ORIGIN_LABEL[d.origin] ? d.origin : "local";
       S.view = ["flow", "timeline", "original", "json"].includes(d.view) ? d.view : "flow";
       S.left = d.left === "struct" ? "struct" : "text";
       S.servings = d.servings || null;
       S.staleText = !!d.staleText;
+      S.mob = d.mob === "out" ? "out" : "in";
+      S.zoom = d.zoom === "fit" || ZOOMS.includes(d.zoom) ? d.zoom : 1;
+      if (d.pdf && typeof d.pdf === "object") for (const k of Object.keys(FK.print.DEFAULTS)) if (typeof d.pdf[k] === typeof FK.print.DEFAULTS[k]) S.pdf[k] = d.pdf[k];
+      S.shareSrc = d.shareSrc !== false;
       return true;
     } catch (e) { return false; }
   }
@@ -56,7 +66,9 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
   function save() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      try { localStorage.setItem(STORE, JSON.stringify({ text: S.text, model: S.model, origin: S.origin, view: S.view, left: S.left, servings: S.servings, staleText: S.staleText })); } catch (e) { /* privat oder blockiert */ }
+      try {
+        localStorage.setItem(STORE, JSON.stringify({ text: S.text, model: S.model, origin: S.origin, view: S.view, left: S.left, servings: S.servings, staleText: S.staleText, mob: S.mob, zoom: S.zoom, pdf: S.pdf, shareSrc: S.shareSrc }));
+      } catch (e) { /* privat oder blockiert */ }
     }, 250);
   }
 
@@ -69,34 +81,31 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     afterModelChange(true);
   }
 
-  async function convertClaude() {
-    if (!S.claude || S.ctl) return;
-    S.ctl = new AbortController();
-    setBusy(true);
-    setStatus("Claude liest das Rezept …");
-    try {
-      const m = await FK.claude.convert(S.claude, S.text, {
-        signal: S.ctl.signal,
-        onProgress: (n) => setStatus("Claude schreibt die Karte … " + n + " Zeichen")
-      });
-      if (!m.steps.length) throw { code: "empty_completion" };
-      S.model = m; S.origin = "claude"; S.staleText = false; S.servings = m.servings;
-      afterModelChange(true);
-      toast("Karte von Claude übernommen");
-    } catch (e) {
-      const info = FK.claude.errorText(e);
-      setStatus(info.text, !info.cancelled);
-      if (info.hide) { S.claude = null; $("#btn-claude").hidden = true; updateHint(); }
-    } finally {
-      S.ctl = null;
-      setBusy(false);
-    }
+  /** Fertiges Modell übernehmen (KI, Code, JSON); der vorige Stand lässt sich zurückholen. */
+  function adopt(m, origin, text, message) {
+    const prev = { text: S.text, model: S.model, origin: S.origin, servings: S.servings, staleText: S.staleText };
+    S.model = m; S.origin = origin; S.servings = m.servings; S.staleText = false;
+    if (typeof text === "string") { S.text = text; $("#src").value = text; }
+    afterModelChange(true);
+    showMobScrolled("out");
+    toast(message, {
+      label: "Rückgängig",
+      run: () => {
+        Object.assign(S, prev);
+        $("#src").value = S.text;
+        afterModelChange(true);
+        toast("Vorheriger Stand wiederhergestellt");
+      }
+    });
   }
 
-  function setBusy(on) {
-    $("#btn-claude").disabled = on;
-    $("#btn-local").disabled = on;
-    $("#btn-stop").hidden = !on;
+  async function loadCode(text) {
+    const raw = await FK.share.decode(text);
+    const m = M.normalize(raw);
+    if (!m.ingredients.length && !m.steps.length) throw new Error("Der Code enthält kein Rezept.");
+    const src = m.source || R.plainText(m);
+    FK.ai.attachSource(m, src);
+    adopt(m, "code", src, "Rezept-Code geladen: " + m.title);
   }
 
   function afterModelChange(structural) {
@@ -147,12 +156,6 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     document.title = m && m.title && m.title !== "Rezept" ? m.title + " · Rezept-Flusskarte" : "Rezept-Flusskarte";
   }
 
-  function updateHint() {
-    $("#convert-hint").textContent = S.claude
-      ? "Umwandeln arbeitet regelbasiert direkt im Browser und aktualisiert die Karte beim Tippen. „Mit Claude umwandeln“ versteht auch frei formulierte Rezepte und nutzt dein Claude-Kontingent."
-      : "Umwandeln arbeitet regelbasiert direkt im Browser und aktualisiert die Karte beim Tippen.";
-  }
-
   // ---- Ansichten ------------------------------------------------------------------------------
   function renderView() {
     const el = $("#view");
@@ -162,9 +165,15 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     const opts = { servings: S.servings || m.servings };
     if (S.view === "flow") {
       const card = R.flowCard(m, opts);
-      el.innerHTML = '<div class="card-scroll">' + card.html + "</div>" +
+      el.innerHTML = '<div class="card-tools" role="group" aria-label="Kartengröße">' +
+        '<button type="button" class="icon-btn" data-zoom="-1" aria-label="Kleiner">−</button>' +
+        '<span class="zoom-val" id="zoom-val"></span>' +
+        '<button type="button" class="icon-btn" data-zoom="1" aria-label="Größer">+</button>' +
+        '<button type="button" class="btn ghost sm" data-zoom="fit" aria-pressed="' + (S.zoom === "fit") + '">Einpassen</button></div>' +
+        '<div class="card-scroll" id="card-scroll">' + card.html + "</div>" +
         '<p class="legend"><span><span class="sw-pass"></span>Wartezeit, Hände frei</span><span><span class="tag tag-split">Teil 1/2</span> aufgeteilte Zutat</span>' +
-        '<span><span class="tag tag-heat">180 °C</span> <span class="tag tag-time">35 min</span> Hitze und Dauer</span><span>✓ fertig, wenn …</span><span>→ Name des Zwischenprodukts</span><span>Schritt anklicken zum Bearbeiten</span></p>';
+        '<span><span class="tag tag-heat">180 °C</span> <span class="tag tag-time">35 min</span> Hitze und Dauer</span><span>✓ fertig, wenn …</span><span>→ Name des Zwischenprodukts</span><span>Schritt antippen zum Bearbeiten</span></p>';
+      applyZoom();
     } else if (S.view === "timeline") {
       el.innerHTML = R.timelineHtml(m);
     } else if (S.view === "original") {
@@ -174,6 +183,31 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
         '<label class="btn ghost" for="json-file">JSON-Datei öffnen</label><input type="file" id="json-file" accept=".json,application/json" hidden></div>' +
         '<textarea id="json-edit" spellcheck="false" aria-label="Flusskarte als JSON">' + esc(JSON.stringify(exportModel(m), null, 2)) + '</textarea><p class="json-err" id="json-err"></p>';
     }
+  }
+
+  // ---- Kartengröße (vor allem für Handy und Tablet) ------------------------------------------------
+  function applyZoom() {
+    const box = $("#card-scroll"), table = box && box.querySelector("table.fk");
+    if (!table) return;
+    let z = S.zoom;
+    if (z === "fit") {
+      if (!box.clientWidth) return; // gerade ausgeblendet (Handy, Rezept-Ansicht)
+      table.style.zoom = "";
+      z = Math.max(0.3, Math.min(1.5, (box.clientWidth - 2) / Math.max(table.offsetWidth, 1)));
+    }
+    table.style.zoom = z === 1 ? "" : String(z);
+    const val = $("#zoom-val");
+    if (val) val.textContent = Math.round(z * 100) + " %";
+    const fitBtn = $('#view [data-zoom="fit"]');
+    if (fitBtn) fitBtn.setAttribute("aria-pressed", String(S.zoom === "fit"));
+  }
+
+  function stepZoom(dir) {
+    const box = $("#card-scroll"), table = box && box.querySelector("table.fk");
+    const cur = S.zoom === "fit" ? (table ? parseFloat(table.style.zoom) || 1 : 1) : S.zoom;
+    const next = dir > 0 ? ZOOMS.find((z) => z > cur + 0.001) : ZOOMS.slice().reverse().find((z) => z < cur - 0.001);
+    if (next == null) return;
+    S.zoom = next; applyZoom(); save();
   }
 
   function exportModel(m) {
@@ -200,14 +234,14 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
   }
 
   function lintHtml(m) {
-    const items = M.lint(m).concat((m.lint || []).map((l) => Object.assign({ origin: "claude" }, l)));
+    const items = M.lint(m).concat((m.lint || []).map((l) => Object.assign({ origin: "ai" }, l)));
     const label = { warn: "Achtung", error: "Fehler", info: "Hinweis" };
     if (!items.length) return '<section class="box"><h3>Prüfung des Rezepts</h3><p class="ok">Keine Lücken gefunden: Jede Zutat wird verwendet, jeder Schritt führt zum Gericht.</p></section>';
     const order = { error: 0, warn: 1, info: 2 };
     items.sort((a, b) => (order[a.level] ?? 3) - (order[b.level] ?? 3));
     return '<section class="box"><h3>Prüfung des Rezepts</h3><ul class="lint">' + items.map((l) => {
       const ref = l.ref ? (m.steps.some((s) => s.id === l.ref) ? ' data-step="' + esc(l.ref) + '"' : ' data-ing="' + esc(l.ref) + '"') : "";
-      return '<li class="' + esc(l.level) + '"' + ref + '><span class="lv">' + (label[l.level] || "Hinweis") + "</span><span>" + esc(l.text) + (l.origin === "claude" ? ' <span class="src">(Claude)</span>' : "") + "</span></li>";
+      return '<li class="' + esc(l.level) + '"' + ref + '><span class="lv">' + (label[l.level] || "Hinweis") + "</span><span>" + esc(l.text) + (l.origin === "ai" || l.origin === "claude" ? ' <span class="src">(KI)</span>' : "") + "</span></li>";
     }).join("") + "</ul></section>";
   }
 
@@ -426,6 +460,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
   }
 
   function openStep(id) {
+    showMob("in");
     setLeft("struct");
     const card = document.getElementById("card-" + id);
     if (!card) return;
@@ -447,6 +482,23 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
   function setView(v) {
     S.view = v;
     renderView(); renderBelow(); save();
+  }
+
+  /** Handy und Tablet hochkant: Rezept oder Karte im Vollbild. */
+  function showMob(which) {
+    S.mob = which;
+    $(".work").dataset.mob = which;
+    $$(".mob-switch [data-mob]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mob === which)));
+    if (which === "out") applyZoom();
+    save();
+  }
+  function showMobScrolled(which) {
+    const was = S.mob;
+    showMob(which);
+    if (was !== which && narrow()) {
+      const nav = $(".mob-switch");
+      if (nav && nav.getBoundingClientRect().top < 0) nav.scrollIntoView({ block: "start" });
+    }
   }
 
   // ---- Export ------------------------------------------------------------------------------------
@@ -476,12 +528,22 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
   }
   function exportHtml() {
     if (!S.model) return;
-    saveFile(slug(S.model.title) + "-flusskarte.html", R.standaloneHtml(S.model, { servings: S.servings || S.model.servings }), "text/html");
+    const L = FK.theme.light();
+    const colors = S.pdf.bw ? null : { grid: L.grid, accent: L.accent, muted: L.muted, ink: L.ink, heat: L.heat, wait: L.wait, "wait-bg": L["wait-bg"], warn: L.warn };
+    saveFile(slug(S.model.title) + "-flusskarte.html", R.standaloneHtml(S.model, { servings: S.servings || S.model.servings, colors }), "text/html");
   }
 
-  async function copyText(text, fallbackEl) {
-    try { await navigator.clipboard.writeText(text); toast("Kopiert"); }
-    catch (e) { if (fallbackEl) { fallbackEl.focus(); fallbackEl.select(); } toast("Bitte mit Strg+C kopieren"); }
+  async function copyText(text, fallbackEl, done) {
+    try { await navigator.clipboard.writeText(text); toast(done || "Kopiert"); }
+    catch (e) {
+      if (fallbackEl) {
+        const details = fallbackEl.closest("details");
+        if (details) details.open = true;
+        fallbackEl.focus(); fallbackEl.select();
+        try { if (document.execCommand("copy")) { toast(done || "Kopiert"); return; } } catch (x) { /* weiter */ }
+      }
+      toast("Bitte markierten Text selbst kopieren");
+    }
   }
 
   function applyJson(text) {
@@ -489,25 +551,138 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     try {
       const raw = JSON.parse(text);
       const m = M.normalize(raw);
-      m.source = raw.source || S.text;
       if (!m.ingredients.length && !m.steps.length) throw new Error("Keine Zutaten oder Schritte gefunden.");
-      S.model = m; S.origin = "import"; S.servings = m.servings;
-      if (raw.source && typeof raw.source === "string") { S.text = raw.source; $("#src").value = S.text; }
-      S.staleText = false;
-      afterModelChange(true);
+      const src = typeof raw.source === "string" && raw.source ? raw.source : S.text;
+      FK.ai.attachSource(m, src);
       if (err) err.textContent = "";
-      toast("JSON übernommen");
+      adopt(m, "import", src, "JSON übernommen");
     } catch (e) {
       if (err) err.textContent = "Das JSON konnte nicht gelesen werden: " + (e && e.message ? e.message : "unbekannter Fehler");
     }
   }
 
   let toastTimer = 0;
-  function toast(text) {
+  function toast(text, action) {
     const t = $("#toast");
-    t.textContent = text; t.hidden = false;
+    t.textContent = "";
+    t.append(document.createTextNode(text));
+    if (action) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "toast-act"; b.textContent = action.label;
+      b.addEventListener("click", () => { t.hidden = true; action.run(); });
+      t.append(b);
+    }
+    t.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
+    toastTimer = setTimeout(() => { t.hidden = true; }, action ? 7000 : 3200);
+  }
+
+  // ---- Dialoge ---------------------------------------------------------------------------------------
+  function openDlg(id) {
+    const d = document.getElementById(id);
+    closeMenu();
+    if (typeof d.showModal === "function") { if (!d.open) d.showModal(); } else d.setAttribute("open", "");
+    return d;
+  }
+  function closeDlg(d) {
+    if (!d) return;
+    if (typeof d.close === "function") d.close(); else d.removeAttribute("open");
+  }
+
+  // Teilen
+  let shareSeq = 0;
+  async function refreshShare() {
+    if (!S.model) return;
+    const seq = ++shareSeq;
+    const code = await FK.share.encode(S.model, { withSource: S.shareSrc });
+    if (seq !== shareSeq) return;
+    $("#share-code").value = code;
+    $("#share-size").textContent = code.length.toLocaleString("de-DE") + " Zeichen";
+    const link = FK.share.linkFor(code);
+    $("#share-link").hidden = !link;
+    $("#share-native").hidden = !navigator.share;
+  }
+  function openShare() {
+    if (!S.model) { toast("Erst ein Rezept umwandeln"); return; }
+    $("#share-src").checked = S.shareSrc;
+    $("#share-err").textContent = "";
+    $("#share-code").value = "";
+    openDlg("dlg-share");
+    refreshShare().catch(() => { $("#share-err").textContent = "Der Code konnte nicht erzeugt werden."; });
+  }
+  async function shareNative() {
+    const code = $("#share-code").value;
+    const link = FK.share.linkFor(code);
+    try {
+      await navigator.share(link ? { title: S.model.title, text: "Rezept-Flusskarte: " + S.model.title, url: link } : { title: S.model.title, text: code });
+    } catch (e) { /* abgebrochen */ }
+  }
+
+  // KI
+  function openAi() {
+    $("#ai-err").textContent = "";
+    $("#ai-prompt").value = FK.ai.promptFor(S.text);
+    openDlg("dlg-ai");
+  }
+  function applyAi() {
+    const err = $("#ai-err");
+    try {
+      const raw = FK.ai.extract($("#ai-answer").value);
+      const m = M.normalize(raw);
+      if (!m.steps.length) throw new Error("Die Antwort enthält keine Arbeitsschritte.");
+      const src = typeof raw.source === "string" && raw.source ? raw.source : S.text;
+      FK.ai.attachSource(m, src);
+      err.textContent = "";
+      $("#ai-answer").value = "";
+      closeDlg($("#dlg-ai"));
+      setLeft("text");
+      adopt(m, "ai", src, "Karte aus der KI-Antwort übernommen");
+    } catch (e) {
+      err.textContent = e && e.message ? e.message : "Die Antwort konnte nicht gelesen werden.";
+    }
+  }
+
+  // PDF
+  function syncPdfDlg() {
+    $$("#dlg-pdf [data-opt]").forEach((i) => { i.checked = !!S.pdf[i.dataset.opt]; });
+    $$("#dlg-pdf [data-orient]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.orient === S.pdf.orient)));
+    $("#pdf-go").disabled = !["card", "notes", "timeline", "lint", "original"].some((k) => S.pdf[k]);
+  }
+  function openPdf() {
+    if (!S.model) { toast("Erst ein Rezept umwandeln"); return; }
+    syncPdfDlg();
+    openDlg("dlg-pdf");
+  }
+  function makePdf() {
+    closeDlg($("#dlg-pdf"));
+    const ok = FK.print.print(S.model, S.servings || S.model.servings, S.pdf);
+    if (!ok) toast("Drucken ist in dieser Ansicht nicht möglich. Bitte die Seite direkt im Browser öffnen.");
+  }
+
+  // Menü „Mehr“
+  function closeMenu() {
+    const pop = $("#menu-more");
+    if (!pop || pop.hidden) return;
+    pop.hidden = true;
+    $("#btn-more").setAttribute("aria-expanded", "false");
+  }
+  function toggleMenu() {
+    const pop = $("#menu-more");
+    const open = pop.hidden;
+    pop.hidden = !open;
+    $("#btn-more").setAttribute("aria-expanded", String(open));
+    if (open) { const first = pop.querySelector("button"); if (first) first.focus(); }
+  }
+  function onMenu(act) {
+    closeMenu();
+    if (act === "ai") openAi();
+    else if (act === "sample") loadSample();
+    else if (act === "json") exportJson();
+    else if (act === "html") exportHtml();
+  }
+
+  function loadSample() {
+    S.text = SAMPLE; $("#src").value = SAMPLE; setLeft("text"); convertLocal(); toast("Beispiel geladen");
   }
 
   // ---- Start ---------------------------------------------------------------------------------------
@@ -516,6 +691,13 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
   function bind() {
     const src = $("#src");
     src.addEventListener("input", () => {
+      // eingefügter Rezept-Code oder Link mit Code: direkt laden
+      if (FK.share.isCodeOnly(src.value)) {
+        const pasted = src.value;
+        src.value = S.text;
+        loadCode(pasted).catch((e) => { src.value = pasted; S.text = pasted; setStatus(e.message, true); });
+        return;
+      }
       S.text = src.value;
       if (S.origin === "local") { clearTimeout(parseTimer); parseTimer = setTimeout(convertLocal, 350); }
       else { S.staleText = true; renderStatus(); }
@@ -535,12 +717,75 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
       btn.textContent = "Umwandeln"; btn.classList.remove("danger");
       S.text = src.value;
       convertLocal();
+      showMobScrolled("out");
     });
-    $("#btn-claude").addEventListener("click", () => { S.text = src.value; convertClaude(); });
-    $("#btn-stop").addEventListener("click", () => { if (S.ctl) S.ctl.abort(); });
-    $("#btn-sample").addEventListener("click", () => { S.text = SAMPLE; src.value = SAMPLE; setLeft("text"); convertLocal(); toast("Beispiel geladen"); });
-    $("#btn-export-json").addEventListener("click", exportJson);
-    $("#btn-export-html").addEventListener("click", exportHtml);
+    $("#btn-ai").addEventListener("click", () => { S.text = src.value; openAi(); });
+
+    // Kopfzeile
+    $("#btn-share").addEventListener("click", openShare);
+    $("#btn-pdf").addEventListener("click", openPdf);
+    $("#btn-theme").addEventListener("click", () => openDlg("dlg-theme"));
+    $("#btn-more").addEventListener("click", (e) => { e.stopPropagation(); toggleMenu(); });
+    $("#menu-more").addEventListener("click", (e) => { const b = e.target.closest("[data-menu]"); if (b) onMenu(b.dataset.menu); });
+    $("#menu-more").addEventListener("keydown", (e) => {
+      const items = $$("#menu-more button");
+      const i = items.indexOf(document.activeElement);
+      if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+      if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+      if (e.key === "Escape") { closeMenu(); $("#btn-more").focus(); }
+    });
+    document.addEventListener("click", (e) => { if (!e.target.closest(".menu")) closeMenu(); });
+
+    $$(".mob-switch [data-mob]").forEach((b) => b.addEventListener("click", () => showMob(b.dataset.mob)));
+
+    // Dialoge: Schließen-Knopf und Klick neben das Fenster
+    $$("dialog.sheet").forEach((d) => {
+      d.addEventListener("click", (e) => { if (e.target === d || e.target.closest("[data-close]")) closeDlg(d); });
+    });
+    FK.theme.mountDialog($("#theme-body"));
+    FK.theme.onChange(() => { if (S.view === "flow") applyZoom(); });
+
+    // Teilen
+    $("#share-src").addEventListener("change", (e) => { S.shareSrc = e.target.checked; save(); refreshShare(); });
+    $("#share-copy").addEventListener("click", () => copyText($("#share-code").value, $("#share-code"), "Code kopiert"));
+    $("#share-link").addEventListener("click", () => {
+      const link = FK.share.linkFor($("#share-code").value);
+      if (link) copyText(link, $("#share-code"), "Link kopiert");
+    });
+    $("#share-native").addEventListener("click", shareNative);
+    $("#share-code").addEventListener("focus", (e) => e.target.select());
+    $("#share-load").addEventListener("click", () => {
+      const err = $("#share-err");
+      err.textContent = "";
+      loadCode($("#share-in").value)
+        .then(() => { $("#share-in").value = ""; closeDlg($("#dlg-share")); })
+        .catch((e) => { err.textContent = e.message; });
+    });
+
+    // KI
+    $("#ai-copy-recipe").addEventListener("click", () => {
+      if (!S.text.trim()) { $("#ai-err").textContent = "Das Textfeld ist leer. Bitte erst ein Rezept einfügen oder die Formatanleitung kopieren."; return; }
+      $("#ai-prompt").value = FK.ai.promptFor(S.text);
+      copyText($("#ai-prompt").value, $("#ai-prompt"), "Prompt mit Rezept kopiert");
+    });
+    $("#ai-copy-generic").addEventListener("click", () => {
+      $("#ai-prompt").value = FK.ai.GENERIC;
+      copyText(FK.ai.GENERIC, $("#ai-prompt"), "Formatanleitung kopiert");
+    });
+    $("#ai-apply").addEventListener("click", applyAi);
+
+    // PDF
+    $("#dlg-pdf").addEventListener("change", (e) => {
+      const k = e.target.dataset && e.target.dataset.opt;
+      if (!k) return;
+      S.pdf[k] = e.target.checked; save(); syncPdfDlg();
+    });
+    $("#dlg-pdf").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-orient]");
+      if (b) { S.pdf.orient = b.dataset.orient; save(); syncPdfDlg(); }
+    });
+    $("#pdf-go").addEventListener("click", makePdf);
+    window.addEventListener("beforeprint", () => FK.print.beforePrint(S.model, S.servings || (S.model && S.model.servings), S.pdf));
 
     const sv = $("#sv");
     const setServ = (v) => {
@@ -564,6 +809,12 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     document.addEventListener("focusin", onHover);
     const view = $("#view");
     view.addEventListener("click", (e) => {
+      const z = e.target.closest("[data-zoom]");
+      if (z) {
+        if (z.dataset.zoom === "fit") { S.zoom = S.zoom === "fit" ? 1 : "fit"; applyZoom(); save(); }
+        else stepZoom(+z.dataset.zoom);
+        return;
+      }
       const op = e.target.closest("td.op[data-step], .tl-row[data-step]");
       if (op) { openStep(op.dataset.step); return; }
       const act = e.target.closest("button[data-act]");
@@ -583,19 +834,33 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
       const li = e.target.closest("li[data-step]");
       if (li) openStep(li.dataset.step);
     });
+
+    let resizeTimer = 0;
+    window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.zoom === "fit") applyZoom(); }, 120); });
+    window.addEventListener("hashchange", importFromHash);
+  }
+
+  /** Link mit #fk=… geöffnet: Rezept laden und das Fragment entfernen. */
+  function importFromHash() {
+    const code = FK.share.fromHash(location.hash);
+    if (!code) return;
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* egal */ }
+    loadCode(code).catch((e) => setStatus(e.message, true));
   }
 
   async function initCapabilities() {
     if (!S.inArtifact) return;
     try {
-      const sample = await window.claude.use("sample");
-      if (sample) { S.claude = sample; $("#btn-claude").hidden = false; updateHint(); }
-    } catch (e) { /* nicht verfügbar */ }
-    try {
       const dl = await window.claude.use("downloads");
       if (dl) S.downloads = dl;
     } catch (e) { /* nicht verfügbar */ }
-    $("#btn-export-html").hidden = !S.downloads;
+    $("#menu-html").hidden = !S.downloads;
+  }
+
+  function registerWorker() {
+    // offline nutzbar, wenn über https ausgeliefert (GitHub Pages); lokal und im Artefakt nicht
+    if (S.inArtifact || location.protocol !== "https:" || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("sw.js").catch(() => { /* ohne Offline-Modus weiter */ });
   }
 
   function start() {
@@ -605,8 +870,11 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     bind();
     if (!S.model) { S.model = FK.parse(S.text); S.origin = "local"; S.servings = S.model.servings; }
     setLeft(S.left);
-    renderHeader(); renderView(); renderBelow(); renderStatus(); updateHint();
+    showMob(S.mob);
+    renderHeader(); renderView(); renderBelow(); renderStatus();
     initCapabilities();
+    importFromHash();
+    registerWorker();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

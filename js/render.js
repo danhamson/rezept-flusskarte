@@ -258,27 +258,42 @@
 
   // ---- Eigenständiges HTML zum Speichern ---------------------------------------------------------
 
-  const STANDALONE_CSS = `body{font:14px/1.35 "Barlow Semi Condensed","Trebuchet MS",Arial,sans-serif;color:#17221c;background:#fff;margin:24px}
-h1{font-size:20px;margin:0 0 4px}p.meta{color:#5d6b62;margin:0 0 12px}
-table{border-collapse:collapse;border:2px solid #3f9a47}td,th{border:1px solid #3f9a47;padding:4px 6px;vertical-align:middle}
-th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#5d6b62}
+  const STANDALONE_COLORS = { grid: "#3f9a47", accent: "#2c7a35", muted: "#5b6a61", ink: "#17221c", heat: "#a8520f", wait: "#46698b", "wait-bg": "#e3ebf3", warn: "#8f5200" };
+  const standaloneCss = (c) => `body{font:14px/1.35 "Barlow Semi Condensed","Trebuchet MS",Arial,sans-serif;color:${c.ink};background:#fff;margin:24px}
+h1{font-size:20px;margin:0 0 4px}p.meta{color:${c.muted};margin:0 0 12px}
+table{border-collapse:collapse;border:2px solid ${c.grid}}td,th{border:1px solid ${c.grid};padding:4px 6px;vertical-align:middle}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:${c.muted}}
 td.fill{border-right:0}td.blank{border:0}td.amt{text-align:right;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px}
-td.op{text-align:center;min-width:6rem;max-width:11rem}td.op.passive{background:repeating-linear-gradient(135deg,#eef3f7 0 6px,#fff 6px 12px)}
-.op-in{display:flex;flex-direction:column;gap:2px;align-items:center}.op-n{font-size:10px;color:#5d6b62}.op-v{font-weight:600}
-.op-d,.op-c,.op-p{font-size:12px;color:#40504a}.tag{display:inline-block;font-size:11px;border:1px solid currentColor;border-radius:3px;padding:0 3px;margin:1px}
-.tag-heat{color:#b85a12}.tag-time{color:#4e6e8e}.tag-rep,.tag-split{color:#2f7d37}.tag-opt{color:#5d6b62}.tag-miss{color:#a15c00}.tag-eq{color:#5d6b62}
-.nt,.of{display:block;font-size:12px;color:#5d6b62}td.eq{font-style:italic}
-ol.notes{font-size:13px;color:#40504a}`;
+td.op{text-align:center;min-width:6rem;max-width:11rem}td.op.passive{background:repeating-linear-gradient(135deg,${c["wait-bg"]} 0 6px,#fff 6px 12px)}
+.op-in{display:flex;flex-direction:column;gap:2px;align-items:center}.op-n{font-size:10px;color:${c.muted}}.op-v{font-weight:600}
+.op-d,.op-c,.op-p{font-size:12px;color:${c.muted}}.op-p{color:${c.accent}}.tag{display:inline-block;font-size:11px;border:1px solid currentColor;border-radius:3px;padding:0 3px;margin:1px}
+.tag-heat{color:${c.heat}}.tag-time{color:${c.wait}}.tag-rep,.tag-split{color:${c.accent}}.tag-opt{color:${c.muted}}.tag-miss{color:${c.warn}}.tag-eq{color:${c.muted}}
+.nt,.of{display:block;font-size:12px;color:${c.muted}}td.eq{font-style:italic}
+ol.notes{font-size:13px;color:${c.muted}}`;
 
   function standaloneHtml(m, opts) {
     const card = flowCard(m, opts);
     const notes = notesOf(m);
     const meta = [m.servings ? M.fmtNum(opts.servings || m.servings) + " Portionen" : "", m.statedTime].filter(Boolean).join(" · ");
-    return "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><title>" + esc(m.title) + "</title><style>" + STANDALONE_CSS + "</style></head><body>" +
+    const colors = Object.assign({}, STANDALONE_COLORS, opts.colors || {});
+    return "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" + esc(m.title) + "</title><style>" + standaloneCss(colors) + "</style></head><body>" +
       "<h1>" + esc(m.title) + "</h1><p class=\"meta\">" + esc(meta) + "</p>" + card.html +
       (notes.length ? "<ol class=\"notes\">" + notes.map((n) => "<li>" + esc(n.text) + "</li>").join("") + "</ol>" : "") +
       "<p class=\"meta\">Erstellt mit Rezept-Flusskarte</p></body></html>";
   }
 
-  FK.render = { esc, flowCard, layerHtml, layerPlans, timelineHtml, originalHtml, notesOf, standaloneHtml, factorOf };
+  // ---- Lesbarer Rezepttext aus dem Modell (für geladene Codes ohne Originaltext) --------------------
+
+  function plainText(m) {
+    const lines = [m.title + (m.servings ? " (" + M.fmtNum(m.servings) + " Portionen)" : ""), "", "Zutaten", ""];
+    for (const z of m.ingredients) lines.push("* " + [M.fmtAmount(z), z.name].filter(Boolean).join(" ") + (z.note ? ", " + z.note : "") + (z.optional ? " (optional)" : ""));
+    lines.push("", "Zubereitung" + (m.statedTime ? " (" + m.statedTime + ")" : ""), "");
+    m.steps.forEach((s, i) => {
+      const t = s.src || [s.detail, s.verb].filter(Boolean).join(" ");
+      lines.push(i + 1 + ". " + t.charAt(0).toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? "" : "."));
+    });
+    return lines.join("\n");
+  }
+
+  FK.render = { esc, flowCard, layerHtml, layerPlans, timelineHtml, originalHtml, notesOf, standaloneHtml, factorOf, plainText };
 })(window.FK = window.FK || {});
