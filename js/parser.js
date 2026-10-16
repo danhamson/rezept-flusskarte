@@ -378,8 +378,13 @@
     const laterSteps = (i) => cleans.some((c, j) => j > i && (STEP_MARK.test(c) || stepHdr(c) === "plain"));
     const timeLabel = (s) => META_TIME_LABEL[s.toLowerCase().replace(/\s+/g, "")] || s;
 
-    let mode = null, titleDone = false, metaLabel = null, prevClean = "";
+    let mode = null, titleDone = false, metaLabel = null, prevClean = "", ingGroup = "";
     const ingLines = [], stepLines = [], noteLines = [], times = [], skip = new Set();
+    // Name einer Zutatengruppe: „Für den Guss:“ → „Guss“, „Rührteig:“, „Zum Bestäuben:“ → „Bestäuben“, „For the chilli“ → „chilli“
+    const groupLabel = (c) => {
+      const g = c.replace(/^(?:zutaten|ingredients)\s+/i, "").replace(/^(?:für|zum|zur|for|to)\s+(?:(?:den|die|das|the)\s+)?/i, "").trim();
+      return /\d/.test(g) ? "" : g;
+    };
     const addTime = (name, v) => { const tv = timeValue(v); if (/[1-9]/.test(tv)) times.push(name + " " + tv); };
     const setServings = (v) => { if (!model.servings) model.servings = parseFloat(v); };
     /** Eine Kopfangabe; true, wenn die Zeile damit erledigt ist. */
@@ -435,7 +440,11 @@
       if (UI_NOISE.test(clean) || /^(für|for)$/i.test(clean)) continue;
       // „Nutrition“ direkt unter „Ingredients“ ist ein Reiter (BBC), kein Ende
       if (END_HDR.test(clean) && clean.length < 80) { if (mode !== "ing" || ingLines.length) mode = "end"; continue; }
-      if (isIngHdr(clean, t)) { mode = "ing"; metaLabel = null; servingsFrom(clean, model); continue; }
+      if (isIngHdr(clean, t)) {
+        mode = "ing"; metaLabel = null; servingsFrom(clean, model);
+        ingGroup = /^(?:(?:zutaten|ingredients)\s+)?(?:für|for)\s/i.test(clean) ? groupLabel(clean) : "";
+        continue;
+      }
       const sh = stepHdr(clean);
       if (sh && !(laterSteps(i) && (sh === "time" || TIME_ONLY.test(cleans[nextLine(i)] || "")))) {
         mode = "steps"; metaLabel = null;
@@ -467,7 +476,9 @@
       if (mode === "ing") {
         // Gruppen („Rührteig:“, „Zum Bestäuben:“, „For the chilli“, „To serve“), Allergene, verklebte Linklisten
         const group = !/\d/.test(clean) && clean.split(/\s+/).length <= 5 && (/:$/.test(t.replace(/\*+$/, "")) || /^(for the|to serve|for serving|to garnish|for garnish)\b/i.test(clean));
-        if (group || /^\((?:enthält|kann spuren)/i.test(clean) || (!/\s/.test(clean) && (clean.match(/[a-zäöüß][A-ZÄÖÜ]/g) || []).length >= 2)) continue;
+        if (group) { ingGroup = groupLabel(clean); continue; }
+        if (/^\((?:enthält|kann spuren)/i.test(clean) || (!/\s/.test(clean) && (clean.match(/[a-zäöüß][A-ZÄÖÜ]/g) || []).length >= 2)) continue;
+        L.group = ingGroup;
         ingLines.push(L);
       }
       else if (mode === "steps") stepLines.push(L);
@@ -486,6 +497,17 @@
       for (const z of parseIngredientLine(text)) { z.id = M.newId(model, "z"); model.ingredients.push(z); }
     }
     for (const z of model.ingredients) z._keys = M.keysFor(z.name);
+    // Gruppe je Zutat („Für den Guss:“) unterscheidet gleichnamige Zutaten; die erste Zeile einer Zutat steckt in ihrem Text
+    let gi = -1, prevLine = null;
+    for (const z of model.ingredients) {
+      if (z.line !== prevLine) {
+        let k = gi + 1;
+        while (k < ingLines.length && !z.line.includes(ingLines[k].text.trim())) k++;
+        if (k < ingLines.length) gi = k;
+        prevLine = z.line;
+      }
+      z._group = gi >= 0 ? ingLines[gi].group || "" : "";
+    }
 
     // Zwischenüberschrift (Dr. Oetker: „Vorbereiten“, „Rührteig zubereiten“): kurz, ohne Zutat, vor einem Absatz
     const heading = (L, i) => {
@@ -504,8 +526,12 @@
     });
     // Mit Schrittmarken gehören alle Zeilen bis zur nächsten Marke zum selben Schritt (HelloFresh: ein Satz je Zeile)
     const marked = numberedNext.size > 0;
-    const st = { model, holder: new Map(), consumed: new Set(), prev: null, pendingNotes: [], equip: new Map(), n: 0, mediumAt: new Map(), medium: new Map() };
+    // Zwischenüberschrift über jedem Absatz („Guss zubereiten“) nennt oft die Zutatengruppe
+    const sectionOf = new Map();
+    { let sec = ""; for (const L of stepLines) { if (heads.includes(L)) sec = L.text.trim(); else sectionOf.set(L, sec); } }
+    const st = { model, holder: new Map(), consumed: new Set(), prev: null, pendingNotes: [], equip: new Map(), n: 0, mediumAt: new Map(), medium: new Map(), partial: new Set(), shareUsers: new Set(), section: "", label: "", sentence: "" };
     for (const L of dropCaptions(bodyLines)) {
+      st.section = sectionOf.get(L) || "";
       // „1Aubergine …“: Nummer ohne Punkt direkt am Text (lecker.de)
       const lead = L.text.match(/^\s*(?:(\d+)\s*[.)]|(\d+)(?=[A-ZÄÖÜ][a-zäöüß])|[*•·\-–▢☐□◻◽▪■○●◦✓✔☑])?\s*/);
       // Fettdruck, Mengen anderer Portionsgrößen und Vorrats-Sternchen gleich lang ausblenden
@@ -522,7 +548,7 @@
     // Anmerkungen nach der Zubereitung gehören zum fertigen Gericht
     const dish = model.steps[model.steps.length - 1];
     if (dish) for (const L of noteLines) appendField(dish, "note", L.text.trim().replace(BULLET_RE, ""));
-    for (const z of model.ingredients) delete z._keys;
+    for (const z of model.ingredients) { delete z._keys; delete z._group; }
     return model;
   }
 
@@ -544,8 +570,10 @@
     // Zwischentitel vor dem Schritt („Gemüse schneiden: Zwiebel … würfeln“) ist keine Handlung, wenn danach ein eigenes Verb folgt;
     // „Würfeln: Zwiebel, Paprika“ bleibt eine Handlung (siehe processSentence)
     const lm = text.match(/^\s*([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]*(?:\s+[\wÄÖÜäöüß-]+){0,3})\s*:\s+/);
+    st.label = "";
     if (lm && !/^(tipp|tip|hinweis|info|achtung|wichtig|note|anmerkung)$/i.test(lm[1]) && findVerb(text.slice(lm[0].length), { guess: false })) {
       text = " ".repeat(lm[0].length) + text.slice(lm[0].length);
+      st.label = lm[1];
     }
     const prot = text.replace(ABBR_RE, (m) => m.slice(0, -1) + "\u0001");
     const bounds = []; let last = 0, m;
@@ -595,6 +623,7 @@
   }
 
   function processSentence(st, sentence, absStart, firstInItem) {
+    st.sentence = sentence;
     const s = sentence.replace(/[.!?]+\s*$/, "");
     if (CHATTER.test(s)) return;
     if (/^\(.*\)$/.test(s)) { attach(st, "note", s.slice(1, -1).trim()); return; }
@@ -752,19 +781,59 @@
       const chosen = hits.length > 1 && parts.length === 1 ? [hits.sort((a, b) => b.best - a.best)[0]] : hits;
       const productToken = chosen.length > 1 || PRODUCT_PIECES.some((p) => t.lw.endsWith(p) && t.lw !== p);
       const portion = portionBefore(body, t.i);
-      const piece = ["flöckchen", "flocken"].find((p) => t.lw.endsWith(p) && t.lw !== p);
       for (const h of chosen) {
-        let p = portion && !wholeUse(h.z, portion) ? Object.assign({}, portion) : null;
-        // „Haferflocken“ ist die Zutat selbst, „Butterflöckchen“ ein Stück davon
-        if (piece && !h.z.name.toLowerCase().endsWith(piece)) p ={ text: (p ? p.text + " " : "") + cap(piece), kind: "part" };
-        else if (p && p.kind === "number") {
-          const unitPiece = ["zehe", "zehen", "scheibe", "scheiben"].find((x) => t.lw.endsWith(x));
-          p.text = p.text + (unitPiece ? " " + cap(unitPiece) : "") + (p.adj ? ", " + p.adj : "");
-        }
-        out.push({ kind: "ingredient", z: h.z, word: t.w, pos: t.i, portion: p, productToken, modifier: !!h.modifier && !productToken });
+        out.push({ kind: "ingredient", z: h.z, word: t.w, pos: t.i, portion: mentionPortion(h.z, portion, t.lw), raw: portion, productToken, modifier: !!h.modifier && !productToken });
       }
     }
+    // gleichnamige Zutaten aus verschiedenen Gruppen: erst jetzt, weil die übrigen Erwähnungen mitentscheiden
+    for (const men of out) {
+      if (men.kind !== "ingredient") continue;
+      const z = pickTwin(st, men, out, body);
+      if (z !== men.z) { men.z = z; men.portion = mentionPortion(z, men.raw, men.word.toLowerCase()); }
+    }
     return out;
+  }
+
+  /** Anteil einer Erwähnung an der Zutat; null, wenn die ganze Menge gemeint ist. */
+  function mentionPortion(z, portion, lw) {
+    let p = portion && !wholeUse(z, portion) ? Object.assign({}, portion) : null;
+    // „Haferflocken“ ist die Zutat selbst, „Butterflöckchen“ ein Stück davon
+    const piece = ["flöckchen", "flocken"].find((x) => lw.endsWith(x) && lw !== x);
+    if (piece && !z.name.toLowerCase().endsWith(piece)) p = { text: (p ? p.text + " " : "") + cap(piece), kind: "part" };
+    else if (p && p.kind === "number") {
+      const unitPiece = ["zehe", "zehen", "scheibe", "scheiben"].find((x) => lw.endsWith(x));
+      p.text = p.text + (unitPiece ? " " + cap(unitPiece) : "") + (p.adj ? ", " + p.adj : "");
+    }
+    return p;
+  }
+
+  /** Gleichnamige Zutaten („Teig: 125 ml Milch“, „Guss: 2 EL Milch“): welche ist gemeint? */
+  function pickTwin(st, men, mentions, body) {
+    const name = men.z.name.toLowerCase();
+    const twins = st.model.ingredients.filter((x) => x.name.toLowerCase() === name);
+    if (twins.length < 2 || men.productToken) return men.z;
+    // Gruppe genannt, vom engsten Text zum weitesten: „Die Form mit Butter einfetten“, „Für den Guss …“, Überschrift „Guss zubereiten“.
+    // In der Handlung zählt „über den Brei gießen“ nicht (das Ziel ist eine andere Gruppe), im übrigen Satz nur „für den …“, „zum …“
+    const PURPOSE = /\b(?:für|zum|zur|for)\s+(?:(?:den|die|das|the)\s+)?(?:[a-zäöüß]+\s+)?$/i, ONTO = /\b(?:auf|über|on|over)\s+(?:(?:den|dem|die|das|der|the)\s+)?(?:[a-zäöüß]+\s+)?$/i;
+    for (const [scope, ok] of [[body, (b) => !ONTO.test(b)], [st.sentence, (b) => PURPOSE.test(b)], [st.label, () => true], [st.section, () => true]]) {
+      // die Zutat selbst nennt keine Gruppe („Milch“ ist nicht „Für die Milchcreme“)
+      const ws = words(scope || "").filter((w) => !men.z._keys.some((k) => M.tokenMatchesKey(w.lw, k)) && ok(scope.slice(Math.max(0, w.i - 30), w.i)));
+      const named = twins.filter((x) => x._group && M.keysFor(x._group).some((k) => ws.some((w) => M.tokenMatchesKey(w.lw, k))));
+      if (named.length === 1) return named[0];
+      if (named.length > 1) break;
+    }
+    // mitgenannte Zutaten derselben Gruppe: „Puderzucker mit Milch glatt rühren“
+    const groups = mentions.filter((m) => m.kind === "ingredient" && m.z.name.toLowerCase() !== name && m.z._group).map((m) => m.z._group);
+    const score = (x) => groups.filter((g) => g === x._group).length;
+    const best = Math.max(...twins.map(score));
+    if (best > 0 && twins.filter((x) => score(x) === best).length === 1) return twins.find((x) => score(x) === best);
+    // „die restliche Milch“ oder eben erst verarbeitet: dieselbe wie zuvor
+    const used = (x) => st.model.steps.some((s) => s.inputs.some((i) => i.ref === x.id));
+    if (men.raw && men.raw.kind === "rest") return twins.find(used) || men.z;
+    const justUsed = st.prev && twins.find((x) => st.prev.inputs.some((i) => i.ref === x.id));
+    if (justUsed) return justUsed;
+    // sonst die erste noch ungenutzte
+    return twins.find((x) => !used(x)) || men.z;
   }
 
   /** „die 40 g Butter“ bei 40 g in der Liste, „1 Selleriestange“ bei 50 g Sellerie: die ganze Zutat, kein Anteil. */
@@ -862,6 +931,21 @@
   const INTO = new Set(["unterheben", "unterrühren", "unterziehen", "untermischen", "einrühren", "unterarbeiten", "unterkneten", "fold"]);
   const MASS_WORD = /(?<![-\wäöüß])(teig(?:e?s)?|masse|mischung|batter|dough|mixture)(?![-\wäöüß])/i;
   const verbClass = (s) => (lex.V[String(s.verb).toLowerCase().split(" ")[0]] || {}).cls;
+
+  /** Anteil einer Masse: „Zwei Drittel des Teigs“ → ⅔, „die Hälfte der Masse“, „2/3 des Teigs“, „den restlichen Teig“ → Rest. */
+  function massShare(body) {
+    const re = new RegExp(MASS_WORD.source, "gi"); let m;
+    while ((m = re.exec(body))) {
+      const p = portionBefore(body, m.index);
+      if (p && (p.kind === "part" || p.kind === "rest")) return { text: p.text, kind: p.kind };
+      const fm = body.slice(0, m.index).match(/(?:^|\s)(\d+\s*\/\s*\d+|[½¼¾⅓⅔])\s+(?:de[rs]|vom|von)\s+(?:[a-zäöüß]+\s+)?$/i);
+      const v = fm && (M.parseQty(fm[1]) || {}).min;
+      if (v > 0 && v < 1) return { text: M.fmtNum(v), kind: "part" };
+    }
+    // „… in die Form füllen, den Rest mit Kakao verrühren“: der Rest der zuletzt geteilten Masse
+    if (/(?:^|\s)(?:den|dem|der)\s+rest(?![\wäöüß])(?!\s+(?:de[rs]|vom|von|of)\b)|\bdie\s+(?:andere|zweite)\s+hälfte\b(?!\s+(?:de[rs]|vom|von)\b)/i.test(body)) return { text: "Rest", kind: "rest" };
+    return null;
+  }
 
   function reachesCombine(model, ref, seen) {
     seen = seen || new Set();
@@ -1068,6 +1152,21 @@
       step.passive = true;
     }
 
+    // „Zwei Drittel des Teigs in die Form füllen“: nur ein Teil des Zwischenprodukts, der Schritt bleibt für den Rest offen;
+    // „den restlichen Teig“ nimmt danach den Rest desselben Schritts
+    const share = massShare(body);
+    const fromShare = (s) => st.shareUsers.has(s.id) || [...upstreamOf(model, s)].some((id) => st.shareUsers.has(id));
+    let shareRef = null;
+    if (share) {
+      const src = model.steps.slice().reverse().find((s) => !st.consumed.has(s.id) && (share.kind === "rest" ? st.partial.has(s.id)
+        : !fromShare(s) && reachesCombine(model, s.id) && !equipmentLed(model, s) && !inputs.some((x) => x.ref !== s.id && reaches(model, x.ref, s.id))));
+      if (src) {
+        shareRef = src.id;
+        const ex = inputs.find((x) => x.ref === src.id);
+        if (ex) ex.portion = share.text; else inputs.unshift({ ref: src.id, portion: share.text });
+      }
+    }
+
     // Fortsetzung des aktuellen Gerichts
     const isStepRef = (ref) => model.steps.some((x) => x.id === ref);
     const rawIngredients = inputs.filter((x) => model.ingredients.some((z) => z.id === x.ref));
@@ -1078,6 +1177,7 @@
     const included = (s) => s && inputs.some((x) => x.ref === s.id);
     let chainTo = null;
     if (anaphor && prevOpen && !included(prevOpen)) chainTo = prevOpen;                       // „darin“, „darauf“
+    else if (shareRef) { /* „den Rest mit Kakao verrühren“: Ausgangsmaterial ist genannt */ }
     else if (!inputs.length) chainTo = cur;                                                   // nur Verb: am Gericht weiter
     else if (verb.cls === "add" && !newContainer && !included(cur)) chainTo = cur;            // etwas zum Gericht geben
     else if (info.join === "und" && verb.cls !== "equip" && !rawIngredients.length && !inputs.some((x) => isStepRef(x.ref)) && prevOpen && !included(prevOpen)) chainTo = prevOpen; // „… abgießen und mit dem Öl schwenken“
@@ -1097,9 +1197,11 @@
       if (main) inputs.unshift({ ref: main.id, portion: "" });
     }
     // „den Teig“, „the batter“: die zuletzt angerührte Masse, wenn keiner der Eingänge sie enthält;
-    // „auf dem hellen Teig verteilen“: die Masse, die schon in der Form liegt
-    const onMass = /\b(?:auf|über)\s+(?:den|dem|die|das)\s+(?:[a-zäöüß]+\s+)?(?:teig|masse)\b/i.test(body);
-    if (MASS_WORD.test(body) && (onMass || !inputs.some((x) => reachesCombine(model, x.ref)))) {
+    // „auf dem hellen Teig verteilen“: die Masse, die schon in der Form liegt; nach dem Teilen auch „darauf verteilen“
+    const hasMass = MASS_WORD.test(body);
+    const onMass = (hasMass && /\b(?:auf|über)\s+(?:den|dem|die|das)\s+(?:[a-zäöüß]+\s+)?(?:teig|masse)\b/i.test(body)) ||
+      (/\b(?:darauf|darüber)\b/i.test(body) && model.steps.some((s) => !st.consumed.has(s.id) && fromShare(s)));
+    if (onMass || (hasMass && !inputs.some((x) => reachesCombine(model, x.ref)))) {
       const mix = model.steps.slice().reverse().find((s) => s !== step && !st.consumed.has(s.id) && (onMass ? reachesCombine(model, s.id) : verbClass(s) === "combine") && !inputs.some((x) => reaches(model, x.ref, s.id)));
       if (mix) inputs.push({ ref: mix.id, portion: "" });
     }
@@ -1143,6 +1245,9 @@
       // nach „herausnehmen“ kommt die Brühe aus diesem Schritt (erst herausnehmen, dann weiterverwenden)
       if (takeOut) for (const [z, s] of st.mediumAt) if (s === inp.ref) { st.medium.set(z, TAKE_OUT.has(verb.key) ? step.id : s); st.mediumAt.delete(z); }
       if (mediumRefs.has(inp.ref)) continue;
+      // nur ein Teil davon: der Rest bleibt, die Zutaten stecken weiter dort
+      if (inp.ref === shareRef && share.kind !== "rest") { st.partial.add(inp.ref); st.shareUsers.add(step.id); continue; }
+      st.partial.delete(inp.ref);
       st.consumed.add(inp.ref);
       for (const [k, v] of st.holder) if (v === inp.ref) st.holder.set(k, step.id);
     }

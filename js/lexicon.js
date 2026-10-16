@@ -160,8 +160,11 @@
   const PORTION_WORDS = [
     [/^(den|dem|der|die|das)?\s*(restlichen|restliche|restlicher|übrigen|übrige|rest)\b/i, "Rest", "rest"],
     [/^(einen|ein)\s+teil\b/i, "ein Teil", "part"],
-    [/^(die|eine)\s+hälfte\b/i, "½", "part"],
+    [/^(die|der|eine|einer)\s+hälfte\b/i, "½", "part"],
     [/^(ein|einem)\s+drittel\b/i, "⅓", "part"],
+    [/^zwei\s+drittel\b/i, "⅔", "part"],
+    [/^(ein|einem)\s+viertel\b/i, "¼", "part"],
+    [/^drei\s+viertel\b/i, "¾", "part"],
     [/^(etwas|wenig|ein wenig|ein paar|einige|reichlich)\b/i, null, "part"],
     [/^(the\s+)?(remaining|rest of the)\b/i, "rest", "rest"],
     [/^(some|a little|a bit of|half of the|half)\b/i, null, "part"]

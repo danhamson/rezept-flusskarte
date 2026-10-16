@@ -351,6 +351,53 @@ const CASES = [
     }
   },
   {
+    name: "Teig teilen: Hälfte und Rest desselben Zwischenprodukts",
+    text: "Zweifarbige Muffins\nZutaten\n200 g Mehl\n2 TL Backpulver\n100 g Zucker\n2 Eier\n150 ml Milch\n2 EL Kakaopulver\nZubereitung\n" +
+      "1. Backofen auf 180 °C vorheizen.\n2. Mehl, Backpulver und Zucker mischen. Eier und Milch zugeben und zu einem glatten Teig verrühren.\n" +
+      "3. Die Hälfte der Masse in die Muffinform füllen.\n4. Kakaopulver unter die restliche Masse rühren und auf dem hellen Teig verteilen.\n5. Die Muffins 25 Minuten backen.",
+    check(r, t) {
+      const fill = r.step("füllen"), dark = r.step("rühren");
+      const half = fill && fill.inputs.find((x) => x.portion === "½");
+      const src = half && r.idx.byId.get(half.ref);
+      t.ok(src && src.kind === "step" && r.reaches(src.node, r.ing("Milch").id), "„Die Hälfte der Masse“: Anteil des angerührten Teigs");
+      t.eq(r.portionOf(dark, half && half.ref), "Rest", "„die restliche Masse“: Rest desselben Schritts");
+      t.ok(dark && r.reaches(dark, r.ing("Kakaopulver").id) && !r.reaches(fill, r.ing("Kakaopulver").id), "Kakao nur im dunklen Teil");
+      const bake = r.step("backen");
+      t.ok(bake && r.reaches(bake, r.ing("Kakaopulver").id) && r.reaches(bake, fill.id), "beide Teile kommen in den Ofen");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Gleichnamige Zutaten in zwei Gruppen: zweite Erwähnung nimmt die ungenutzte",
+    text: "Zitronenkuchen\nZutaten\nFür den Teig:\n200 g Butter\n180 g Zucker\n3 Eier\n250 g Mehl\n125 ml Milch\nGuss:\n150 g Puderzucker\n2 EL Milch\nZubereitung\n" +
+      "1. Backofen auf 175 °C vorheizen.\n2. Butter und Zucker cremig rühren, die Eier einzeln unterrühren. Das Mehl abwechselnd mit der Milch unterrühren.\n" +
+      "3. Den Teig in eine Kastenform füllen und 50 Minuten backen. Den Kuchen abkühlen lassen.\n4. Den Kuchen mit Milch bestreichen und mit Puderzucker bestäuben.",
+    check(r, t) {
+      const [dough, glaze] = r.m.ingredients.filter((z) => z.name === "Milch");
+      const stir = r.step("unterrühren", 1), brush = r.step("bestreichen");
+      t.ok(stir && stir.inputs.some((x) => x.ref === dough.id), "erste Erwähnung: Milch aus dem Teig");
+      t.ok(brush && brush.inputs.some((x) => x.ref === glaze.id), "zweite Erwähnung: Milch aus dem Guss");
+      t.ok(brush && !brush.inputs.some((x) => x.ref === dough.id), "Teig-Milch nicht noch einmal verwendet");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Gleichnamige Zutaten: Gruppe im Schritt genannt, mitgenannte Zutaten",
+    text: "Butterkuchen\nZutaten\nFür die Form:\n1 TL Butter\nFür den Teig:\n150 g Butter\n150 g Zucker\n2 Eier\n200 g Mehl\n100 ml Milch\nFür den Guss:\n100 g Puderzucker\n2 EL Milch\nZubereitung\n" +
+      "1. Für den Guss Puderzucker mit Milch glatt rühren.\n2. Die Form mit Butter einfetten. Backofen auf 180 °C vorheizen.\n" +
+      "3. Butter mit Zucker schaumig rühren, Eier unterrühren. Mehl und Milch zugeben und verrühren.\n4. Den Teig in die Form füllen und 30 Minuten backen.\n5. Den warmen Kuchen mit der Puderzuckermischung bestreichen.",
+    check(r, t) {
+      const [formButter, doughButter] = r.m.ingredients.filter((z) => z.name === "Butter");
+      const [doughMilk, glazeMilk] = r.m.ingredients.filter((z) => z.name === "Milch");
+      const glaze = r.m.steps[0], grease = r.step("einfetten"), cream = r.step("rühren", 1);
+      t.ok(glaze.inputs.some((x) => x.ref === glazeMilk.id), "„Für den Guss … Milch“: Milch aus der Gruppe Guss");
+      t.ok(grease && grease.inputs.some((x) => x.ref === formButter.id), "„Die Form mit Butter einfetten“: Butter für die Form");
+      t.ok(cream && cream.inputs.some((x) => x.ref === doughButter.id) && !r.reaches(cream, formButter.id), "Butter mit Zucker: Butter aus dem Teig");
+      t.ok(r.m.steps.some((s) => s.inputs.some((x) => x.ref === doughMilk.id) && r.reaches(s, r.ing("Mehl").id)), "Milch im Teig ist die Teig-Milch");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
     name: "Chefkoch-Seite: Menge, Zutat und Zusatz in eigenen Zeilen",
     text: [
       "Für 4 Portionen", "", "", "4", "", "", "Für den Auflauf:", " n. B.", "Gemüsebrühepulver", "6 m.-große", "Kartoffel(n)",
@@ -501,6 +548,9 @@ const CASES = [
       t.eq(pre && [pre.temp, pre.detail, pre.note], ["180 °C", "Ober-/Unterhitze", "Heißluft: etwa 160 °C"], "Ofenstufen unter „Backofen vorheizen.“");
       t.eq(r.steps("backen").map((s) => M.durText(s.dur)), ["55 min"], "„in den Backofen schieben und 55 Minuten backen“ ist ein Schritt");
       t.ok(r.reaches(r.step("backen"), r.ing("Fett").id) && r.reaches(r.step("backen"), r.ing("Kakaopulver").id), "gefettete Form und dunkler Teig landen im Ofen");
+      const fill = r.step("füllen"), part = fill && fill.inputs.find((x) => x.portion === "⅔");
+      t.ok(part && r.idx.byId.get(part.ref).kind === "step", "„Zwei Drittel des Teigs“ ist ein Anteil des Rührteigs");
+      t.eq(r.portionOf(r.step("rühren", 1), part && part.ref), "Rest", "„unter den restlichen Teig“ nimmt den Rest desselben Teigs");
       t.eq(r.warnings(), [], "keine Warnungen");
     }
   },
