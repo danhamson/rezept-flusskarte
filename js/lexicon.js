@@ -25,7 +25,8 @@
   def("finish", "servieren,anrichten,portionieren,tranchieren,garnieren,auftragen");
   def("prep", "abgießen,abseihen,abschrecken,auspressen,ausdrücken,zerbröseln,ausrollen,formen,abziehen,einritzen,einschneiden,zerteilen,zerpflücken,entrinden,auslösen,ausstechen,aushöhlen,durchpressen,passieren,abschöpfen,entfernen,zerkrümeln");
   def("combine", "schwenken,umrühren,durchrühren,unterarbeiten,aufschäumen,montieren,vermahlen");
-  def("add", "dazufügen,hinzugießen,unterkneten,einkneten");
+  def("add", "dazufügen,hinzugießen,unterkneten,einkneten,zufügen");
+  def("prep", "herausnehmen,herausheben");
   def("heat", "zubereiten,einköcheln");
   def("add", "bestäuben,aufstreichen,beträufeln,überstreuen,auflegen,darübergeben,dazugießen,einstreuen,nachwürzen,beifügen");
   def("heat", "wenden,anschwitzen,aufbacken,backen lassen,schmelzen lassen,erhitzen lassen,auslassen,einreduzieren,abflämmen,bräunen,rösten lassen");
@@ -113,7 +114,8 @@
     gratinieren: "gratiniert", frittieren: "frittiert", grillen: "gegrillt", wenden: "gewendet", rühren: "gerührt",
     geben: "gegeben", dazugeben: "dazugegeben", hinzugeben: "hinzugegeben", dazufügen: "dazugefügt", hinzugießen: "hinzugegossen",
     entfernen: "entfernt", abwiegen: "abgewogen", zerkrümeln: "zerkrümelt", ablöschen: "abgelöscht", umrühren: "umgerührt",
-    abschmecken: "abgeschmeckt", zubereiten: "zubereitet", einköcheln: "eingeköchelt"
+    abschmecken: "abgeschmeckt", zubereiten: "zubereitet", einköcheln: "eingeköchelt", zufügen: "zugefügt",
+    herausnehmen: "herausgenommen"
   };
 
   // Geräte. node: wird zur eigenen Zeile, wenn es vorbereitet werden muss
@@ -134,7 +136,8 @@
     ["Prise", "prise", "prisen"], ["Bund", "bund"], ["Zehe", "zehe", "zehen"], ["Stück", "stück", "stk", "stk.", "st."],
     ["Dose", "dose", "dosen"], ["Pck.", "pck", "pck.", "päckchen", "packung", "pkg"], ["Becher", "becher"], ["Tasse", "tasse", "tassen"],
     ["Glas", "glas", "gläser"], ["Scheibe", "scheibe", "scheiben"], ["Zweig", "zweig", "zweige"], ["Handvoll", "handvoll"],
-    ["Blatt", "blatt", "blätter"], ["Würfel", "würfel"],
+    ["Blatt", "blatt", "blätter"], ["Würfel", "würfel"], ["Kopf", "kopf", "köpfe"], ["Stange", "stange", "stangen"],
+    ["Schuss", "schuss"], ["Spritzer", "spritzer"],
     ["cup", "cup", "cups", "c."], ["Tbs.", "tbs", "tbs.", "tbsp", "tbsp.", "tablespoon", "tablespoons"],
     ["tsp.", "tsp", "tsp.", "teaspoon", "teaspoons"], ["oz.", "oz", "oz.", "ounce", "ounces"], ["lb.", "lb", "lb.", "lbs", "lbs.", "pound", "pounds"],
     ["clove", "clove", "cloves"], ["can", "can", "cans"], ["pinch", "pinch"], ["stick", "stick", "sticks"]
@@ -146,7 +149,7 @@
   const ADJ = new Set(("frisch,frischer,frische,frisches,gemahlen,gemahlener,gemahlene,gemahlenes,getrocknet,getrocknete,getrockneter,fein,feine,grob,grobe,gehackt,gehackte,gehackter,gerieben,geriebener,geriebene,geschält,geschälte,vorwiegend,festkochend,festkochende,mehligkochend,weich,weiche,kalt,kalte,kaltes,warm,warme,groß,große,großer,klein,kleine,kleiner,mittelgroß,mittelgroße,schwarz,schwarzer,weißer,bunter,bunt,gesalzen,gesalzene,ungesalzen,ungesalzene,zimmerwarm,zimmerwarme,flüssig,flüssige,gemischt,gemischtes,gemischte,passiert,passierte,optional,ca.,etwa,fresh,ground,dried,large,medium,small,chopped,minced,grated,fine,finely").split(","));
 
   // Stückwörter, die an Zutaten hängen (Zwiebel-ringe, Butter-flöckchen)
-  const PIECE = ["flöckchen", "flocken", "ringe", "ringen", "scheiben", "würfel", "würfeln", "streifen", "stücke", "stücken", "zehen", "zehe", "blätter", "blättchen", "spalten", "stifte", "hälften", "stange", "stangen", "mischung", "masse", "soße", "sauce", "creme", "teig"];
+  const PIECE = ["flöckchen", "flocken", "röschen", "ringe", "ringen", "scheiben", "würfel", "würfeln", "streifen", "stücke", "stücken", "zehen", "zehe", "blätter", "blättchen", "spalten", "stifte", "hälften", "stange", "stangen", "mischung", "masse", "soße", "sauce", "creme", "teig"];
 
   // Gleichbedeutende Namen: „Karotte“ im Text findet „Möhre“ in der Zutatenliste
   const SYNONYMS = [["möhre", "karotte", "mohrrübe"], ["frühlingszwiebel", "lauchzwiebel"], ["kartoffel", "erdapfel"]];

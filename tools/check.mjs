@@ -343,6 +343,43 @@ const CASES = [
       t.eq(got.filter((v) => !want.includes(v)), [], "data-for enthält genau die escapte ID");
     }
   },
+  {
+    name: "Chefkoch-Seite: Menge, Zutat und Zusatz in eigenen Zeilen",
+    text: [
+      "Für 4 Portionen", "", "", "4", "", "", "Für den Auflauf:", " n. B.", "Gemüsebrühepulver", "6 m.-große", "Kartoffel(n)",
+      "2 Köpfe", "Brokkoli", "Für die Sauce:", "1", "Zwiebel(n)", "2 EL", "Margarine", "2 EL", "Mehl", "0.5 Liter", "Kochwasser",
+      "von Kartoffeln und Brokkoli", "1 Pck.", "Sahne", "oder Sojasahne, ca. 200 ml", " etwas", "Muskat", " etwas", "Salz und Pfeffer",
+      " viel", "Käse, geriebener", "Bring! LogoAuf die Einkaufsliste setzen", "", "create", "Eigene Kopie erstellen", "Zubereitung", "",
+      "55 Min.", "Gesamtzeit", "", "30 Min.", "Arbeitszeit", "", "25 Min.", "Koch-/Backzeit", "1",
+      "Zuerst ca. 1 l Wasser zum Kochen bringen und die Gemüsebrühe dazugeben.", "", "2",
+      "Währenddessen die Kartoffeln schälen und den Brokkoli putzen und in Röschen schneiden. Die Kartoffeln in Würfel schneiden in der Brühe gar kochen. Die Kartoffeln mit einem Schaumlöffel aus der Brühe nehmen, dann die Brokkoliröschen in der Brühe kochen. Beides in eine große Auflaufform geben.",
+      "", "3",
+      "Für die Soße eine Zwiebel würfeln und in der Margarine glasig braten. Dann das Mehl darüber streuen und eine Weile bräunen lassen. Dann einen halben Liter von der Gemüsebrühe, in der Kartoffeln und Brokkoli gekocht wurden, hinzugeben und kurz andicken lassen. Anschließend die Sahne zufügen und die Soße mit Muskat, Salz und Pfeffer gut würzen. Die Soße in die Auflaufform geben, den Käse darüber streuen.",
+      "", "4", "Bei 180 °C Ober-/Unterhitze ca. 20 - 25 min. in den heißen Backofen stellen, bis der Käse schön braun ist."
+    ].join("\n"),
+    check(r, t) {
+      t.eq(r.m.servings, 4, "Portionen");
+      t.eq(r.m.ingredients.map((z) => z.name), ["Gemüsebrühepulver", "Kartoffeln", "Brokkoli", "Zwiebel", "Margarine", "Mehl", "Kochwasser", "Sahne", "Muskat", "Salz", "Pfeffer", "Käse"], "Zutaten");
+      t.eq(M.fmtAmount(r.ing("Brokkoli")).replace(/\s/g, " "), "2 Köpfe", "Menge aus der Zeile davor");
+      t.eq(M.fmtAmount(r.ing("Muskat")), "etwas", "Mengenwort");
+      t.ok(r.ing("Gemüsebrühepulver").optional, "„n. B.“ ist nach Belieben");
+      t.eq(r.ing("Sahne").note, "oder Sojasahne, ca. 200 ml", "Zusatzzeile als Notiz");
+      t.ok(/gesamt 55 Min\..*Arbeitszeit 30 Min\..*Kochen\/Backen 25 Min\./.test(r.m.statedTime), "Zeiten mit Wert vor der Bezeichnung");
+      t.eq(new Set(r.m.steps.map((s) => s.srcStep)).size, 4, "vier nummerierte Schritte");
+      const cookPot = r.step("kochen"), take = r.step("herausnehmen"), cookBroc = r.step("kochen", 1);
+      t.ok(cookPot && r.reaches(cookPot, r.ing("Kartoffeln").id) && r.reaches(cookPot, r.ing("Gemüsebrühepulver").id), "Kartoffeln garen in der Brühe");
+      t.ok(take && cookBroc && cookBroc.inputs.some((x) => x.ref === take.id && x.portion === "Brühe") && r.reaches(cookBroc, r.ing("Brokkoli").id), "Brokkoli kocht nach dem Herausnehmen in derselben Brühe");
+      const form = r.step("geben");
+      t.ok(form && r.reaches(form, r.ing("Kartoffeln").id) && r.reaches(form, r.ing("Brokkoli").id), "Beides kommt in die Form");
+      const sauce = r.step("hinzugeben");
+      t.ok(sauce && sauce.inputs.some((x) => x.ref === cookBroc.id) && !sauce.inputs.some((x) => x.ref === form.id), "Soße nimmt Brühe, nicht die Form");
+      t.ok(r.reaches(r.step("braten"), r.ing("Zwiebel").id), "Zwiebel wird in der Margarine gebraten");
+      const last = r.m.steps[r.m.steps.length - 1];
+      t.eq([last.verb, last.temp, M.durText(last.dur), last.passive], ["backen", "180 °C", "20–25 min", true], "In den Ofen stellen ist Backen");
+      t.ok(r.reaches(last, form.id) && r.reaches(last, sauce.id), "Soße und Gemüse kommen zusammen in den Ofen");
+      t.eq(r.lint.filter((l) => l.level !== "info").map((l) => l.text), [], "keine Warnungen");
+    }
+  },
 ];
 
 function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }

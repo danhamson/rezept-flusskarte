@@ -157,6 +157,9 @@
     for (const p of lex.PIECE) {
       if (head.endsWith(p) && head.length - p.length >= 3) keys.add(stem(head.slice(0, -p.length)));
     }
+    // „Gemüsebrühepulver“ wird zur „Brühe“, „Currypaste“ zum „Curry“
+    const conc = head.match(/^(.{5,})(pulver|paste|konzentrat|granulat|extrakt)$/);
+    if (conc) keys.add(stem(conc[1]));
     for (const g of lex.SYNONYMS) if (g.some((w) => stem(w) === stem(head))) for (const w of g) keys.add(stem(w));
     return [...keys].filter((k) => k.length >= 2);
   }
