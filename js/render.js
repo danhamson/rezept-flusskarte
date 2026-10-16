@@ -95,7 +95,8 @@
       // data-for: Verbraucher der Zeile, damit ein Haken die Zeile ohne Neuaufbau grau färben kann
       const dn = row.kind !== "done" && done && done.has(row.consumer) ? " done" : "";
       const dfor = row.kind !== "done" && row.consumer ? ' data-for="' + attr(row.consumer) + '"' : "";
-      h += leafCellsFlow(row, factor).replace(/<td class="(amt|ing)([^"]*)"/g, '<td class="$1$2' + dn + '"' + dfor);
+      // Ersetzungsfunktion statt -text: „$&“, „$'“ in einer ID würden sonst als Muster ausgewertet
+      h += leafCellsFlow(row, factor).replace(/<td class="(amt|ing)([^"]*)"/g, (_, a, b) => '<td class="' + a + b + dn + '"' + dfor);
       for (let c = 1; c <= L.cols; c++) {
         const cell = L.grid[r][c - 1];
         if (!cell || cell.r0 !== r || cell.c0 !== c) continue;

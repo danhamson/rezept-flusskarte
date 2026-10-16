@@ -325,6 +325,24 @@ const CASES = [
       t.ok(!/data-timer=/.test(FK.render.flowCard(r.m, { servings: 2 }).html), "kein Timer-Knopf im Druck");
     }
   },
+  {
+    name: "Sicherheit: IDs mit $-Zeichen bleiben im HTML wörtlich",
+    text: "",
+    check(r, t) {
+      // IDs aus Rezept-Codes sind beliebiger Text; „$'“ oder „$&“ darf beim Einsetzen kein HTML nachziehen
+      const ids = ["s$'x", "s$&y", "s$`z"];
+      const m = FK.model.normalize({
+        title: "T", servings: 2,
+        ingredients: [{ id: "z1", name: "Mehl", qty: 200, unit: "g" }, { id: "z2", name: "Milch", qty: 100, unit: "ml" }],
+        steps: [{ id: ids[0], verb: "sieben", inputs: ["z1"] }, { id: ids[1], verb: "verrühren", inputs: [ids[0], "z2"] }, { id: ids[2], verb: "backen", inputs: [ids[1]] }]
+      });
+      const html = FK.render.flowCard(m, { servings: 2, done: new Set(), timers: true }).html;
+      const want = ids.map(FK.render.esc);
+      const got = [...new Set([...html.matchAll(/data-for="([^"]*)"/g)].map((x) => x[1]))];
+      t.ok(got.length >= 2, "Zutatenzeilen tragen data-for");
+      t.eq(got.filter((v) => !want.includes(v)), [], "data-for enthält genau die escapte ID");
+    }
+  },
 ];
 
 function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }

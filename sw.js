@@ -2,7 +2,7 @@
  * Netz zuerst, damit Änderungen sofort ankommen; ohne Netz die zuletzt geladene Fassung.
  * VERSION und ASSETS schreibt tools/build.mjs.
  */
-const VERSION = "12a300e81f";
+const VERSION = "1cf39da83a";
 const ASSETS = ["./","index.html","manifest.webmanifest","icons/icon.svg","icons/icon-192.png","icons/icon-512.png","icons/apple-touch-icon.png","styles.css","js/theme.js","js/lexicon.js","js/model.js","js/parser.js","js/layout.js","js/schedule.js","js/render.js","js/share.js","js/ai.js","js/print.js","js/kitchen.js","js/app.js"];
 const CACHE = "flusskarte-" + VERSION;
 
