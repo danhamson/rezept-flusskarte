@@ -33,9 +33,12 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
   const STORE = "flusskarte.v1";
   const ORIGIN_LABEL = { local: "lokal umgewandelt", ai: "von KI umgewandelt", manual: "von Hand bearbeitet", import: "aus JSON geladen", code: "aus Rezept-Code geladen" };
   const ZOOMS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.15, 1.3, 1.5];
+  // Haken überstehen Neuladen; erst wenn 12 Stunden lang keiner gesetzt wurde und kein Timer läuft,
+  // gilt das Kochen als vorbei (lange Schmorgerichte und Teig über Nacht bleiben damit erhalten)
+  const DONE_TTL = 12 * 60 * 60 * 1000;
   const S = {
     text: "", model: null, origin: "local", view: "flow", left: "text", servings: null, staleText: false,
-    mob: "in", zoom: 1, pdf: Object.assign({}, FK.print.DEFAULTS), shareSrc: true, done: [], hideDone: false,
+    mob: "in", zoom: 1, pdf: Object.assign({}, FK.print.DEFAULTS), shareSrc: true, done: [], doneAt: 0, hideDone: false,
     downloads: null, inArtifact: !!(window.claude && window.claude.use)
   };
   const narrow = () => matchMedia("(max-width: 959.98px)").matches;
@@ -60,18 +63,32 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
       if (d.pdf && typeof d.pdf === "object") for (const k of Object.keys(FK.print.DEFAULTS)) if (typeof d.pdf[k] === typeof FK.print.DEFAULTS[k]) S.pdf[k] = d.pdf[k];
       S.shareSrc = d.shareSrc !== false;
       S.done = Array.isArray(d.done) ? d.done.filter((x) => typeof x === "string") : [];
+      S.doneAt = typeof d.doneAt === "number" ? d.doneAt : Date.now();
       S.hideDone = !!d.hideDone;
       return true;
     } catch (e) { return false; }
   }
   let saveTimer = 0;
+  function writeNow() {
+    clearTimeout(saveTimer); saveTimer = 0;
+    try {
+      localStorage.setItem(STORE, JSON.stringify({ text: S.text, model: S.model, origin: S.origin, view: S.view, left: S.left, servings: S.servings, staleText: S.staleText, mob: S.mob, zoom: S.zoom, pdf: S.pdf, shareSrc: S.shareSrc, done: S.done, doneAt: S.doneAt, hideDone: S.hideDone }));
+    } catch (e) { /* privat oder blockiert */ }
+  }
   function save() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      try {
-        localStorage.setItem(STORE, JSON.stringify({ text: S.text, model: S.model, origin: S.origin, view: S.view, left: S.left, servings: S.servings, staleText: S.staleText, mob: S.mob, zoom: S.zoom, pdf: S.pdf, shareSrc: S.shareSrc, done: S.done, hideDone: S.hideDone }));
-      } catch (e) { /* privat oder blockiert */ }
-    }, 250);
+    saveTimer = setTimeout(writeNow, 250);
+  }
+  // Neuladen direkt nach einem Haken: nichts verlieren
+  function flushSave() { if (saveTimer) writeNow(); }
+
+  /** Haken vom letzten Kochen entfernen, wenn sie zu alt sind (beim Start und beim Zurückkehren zur Seite). */
+  function expireDone() {
+    if (!S.done.length || Date.now() - S.doneAt < DONE_TTL || FK.kitchen.active()) return;
+    const prev = S.done, at = S.doneAt;
+    S.done = [];
+    save(); renderView();
+    toast("Haken vom letzten Kochen entfernt (älter als 12 Stunden)", { label: "Zurückholen", run: () => { S.done = prev; S.doneAt = Math.max(at, Date.now() - DONE_TTL / 2); save(); renderView(); } });
   }
 
   // ---- Umwandeln ---------------------------------------------------------------------------
@@ -207,6 +224,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     if (on == null) on = !has;
     if (on === has) return;
     S.done = on ? S.done.concat(id) : S.done.filter((x) => x !== id);
+    S.doneAt = Date.now();
     save();
     const v = $("#view"), q = window.CSS && CSS.escape ? CSS.escape(id) : id;
     $$('[data-step="' + q + '"][role="checkbox"]', v).forEach((el) => { el.classList.toggle("done", on); el.setAttribute("aria-checked", String(on)); });
@@ -873,7 +891,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
         else {
           const prev = S.done;
           S.done = [];
-          toast("Alle Haken entfernt", { label: "Rückgängig", run: () => { S.done = prev; save(); renderView(); } });
+          toast("Alle Haken entfernt", { label: "Rückgängig", run: () => { S.done = prev; S.doneAt = Date.now(); save(); renderView(); } });
         }
         save(); renderView();
         return;
@@ -909,6 +927,8 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     let resizeTimer = 0;
     window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.zoom === "fit") applyZoom(); }, 120); });
     window.addEventListener("hashchange", importFromHash);
+    window.addEventListener("pagehide", flushSave);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) flushSave(); else expireDone(); });
   }
 
   /** Link mit #fk=… geöffnet: Rezept laden und das Fragment entfernen. */
@@ -944,6 +964,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     setLeft(S.left);
     showMob(S.mob);
     renderHeader(); renderView(); renderBelow(); renderStatus();
+    expireDone();
     initCapabilities();
     importFromHash();
     registerWorker();

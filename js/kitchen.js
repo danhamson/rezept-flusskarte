@@ -218,5 +218,5 @@
     render(); tick();
   }
 
-  FK.kitchen = { init, start, paint, has: (step) => timers.some((t) => t.step === step) };
+  FK.kitchen = { init, start, paint, has: (step) => timers.some((t) => t.step === step), active: () => timers.length > 0 };
 })(window.FK = window.FK || {});
