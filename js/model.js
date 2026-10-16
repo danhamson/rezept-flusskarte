@@ -108,10 +108,10 @@
   function durText(d) {
     d = normDur(d);
     if (!d) return "";
-    // volle Stunden ab 2 h, sonst beide Werte in Minuten („120–150 min“, nicht „2 h–150 min“)
-    const hours = d.min >= 120 && d.min % 60 === 0 && d.max % 60 === 0;
-    const f = (m) => (hours ? String(m / 60) : fmtNum(m));
-    return (d.est ? "≈ " : "") + (d.min === d.max ? f(d.min) : f(d.min) + "–" + f(d.max)) + (hours ? " h" : " min");
+    // volle Stunden ab 2 h, sonst beide Werte in Minuten („120–150 min“, nicht „2 h–150 min“); unter 1 min in Sekunden (Thermomix)
+    const hours = d.min >= 120 && d.min % 60 === 0 && d.max % 60 === 0, secs = d.max < 1;
+    const f = (m) => (hours ? String(m / 60) : secs ? String(Math.round(m * 60)) : fmtNum(m));
+    return (d.est ? "≈ " : "") + (d.min === d.max ? f(d.min) : f(d.min) + "–" + f(d.max)) + (hours ? " h" : secs ? " s" : " min");
   }
 
   function normDur(d) {
@@ -147,6 +147,9 @@
   }
 
   function keysFor(name) {
+    // „Pancetta oder durchwachsener Speck“: beide Namen finden die Zutat
+    const alt = String(name || "").split(/\s+(?:oder|or|bzw\.)\s+/i);
+    if (alt.length > 1 && alt.every((p) => p.trim().length >= 3 && !/-$/.test(p.trim()))) return [...new Set(alt.flatMap((p) => keysFor(p)))];
     const words = String(name || "").toLowerCase().replace(/[(),.]/g, " ").split(/\s+/).filter(Boolean);
     const core = words.filter((w) => !lex.ADJ.has(w));
     const keys = new Set();
@@ -174,7 +177,8 @@
     const t = stem(token);
     // Einzahl zur Mehrzahl in der Liste: „Ei“ → Eier, „Zwiebel“ → Zwiebeln
     if (t.length >= 2 && key.startsWith(t) && /^(er|e|n|en|s)$/.test(key.slice(t.length))) return true;
-    if (t.length >= 4 && key.length - t.length >= 3 && key.startsWith(t)) return true;
+    // „Gemüse“ ist ein Oberbegriff, keine Kurzform der Gemüsebrühe
+    if (t.length >= 4 && key.length - t.length >= 3 && key.startsWith(t) && t !== "gemüs") return true;
     if ((t.length >= 3 || t === "öl") && key.length - t.length >= 3 && key.endsWith(t)) return true;
     return false;
   }

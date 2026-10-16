@@ -15,29 +15,54 @@
   const WORD_RE = /[A-Za-zÄÖÜäöüßéèàçâ]+(?:-[A-Za-zÄÖÜäöüßéèàçâ]+)*/g;
   const ABBR_RE = /\b(ca|z\.\s?B|bzw|evtl|ggf|Min|Std|Pck|Msp|EL|TL|Stk|St|Nr|etc|inkl|max|min|Tbs|tsp|oz|lb|lbs|approx|vgl)\./g;
   const ING_HDR = /^(zutaten|ingredients|einkaufsliste|du brauchst|you need|für (?:den|die|das))\b/i;
-  const STEP_HDR = /^(zubereitung|anleitung|so geht'?s|so wird'?s gemacht|arbeitsschritte|instructions|directions|method|preparation|steps)\b/i;
-  // Was nach dem Rezept kommt (Nährwerte, Kommentare), wird nicht mehr gelesen
-  const END_HDR = /^(nährwerte|nährwertangaben|nährwert|nutrition|was meinst du|kommentare?|rezept bewerten|hast du (?:dieses|das|mein)\b.*ausprobiert)/i;
+  const STEP_HDR = /^(zubereitungsschritte|zubereitungsanleitung|zubereitung|anleitung|so geht'?s|so wird'?s gemacht|arbeitsschritte|schritt für schritt|instructions|directions|method|preparation|steps)\b/i;
+  // Schrittmarke auf eigener Zeile: „Schritt 2/3“ (Kitchen Stories), „Step 1“ (Allrecipes), „step 1“ (BBC)
+  const STEP_MARK = /^(?:schritt|step)\s*\d+(?:\s*(?:\/|von|of)\s*\d+)?\s*:?$/i;
+  // Geräteliste (HelloFresh, Kitchen Stories, EAT SMARTER, Blogs): keine Zutaten
+  const EQUIP_HDR = /^(utensilien|kochutensilien|küchenutensilien|küchengeräte|geräte und zubehör|equipment|special equipment)$/i;
+  // Anmerkungen nach der Zubereitung (Blogs): werden Hinweise zum fertigen Gericht
+  const NOTES_HDR = /^(notes|recipe notes|anmerkungen|hinweise|tipps|tipps zum rezept|tipps und tricks|make-ahead(?: and storage)?|storage|aufbewahrung|variationen|variations)$/i;
+  // Was nach dem Rezept kommt (Nährwerte, Kommentare, verwandte Rezepte), wird nicht mehr gelesen.
+  // Steht es davor (HelloFresh, EAT SMARTER: Nährwerte vor der Zubereitung), liest die nächste Überschrift weiter.
+  const END_HDR = /^(nährwerte|nährwertangaben|nährwert|nutrition|was meinst du|kommentare?|rezept bewerten|hast du (?:dieses|das|mein)\b.*ausprobiert|did you make this recipe|ähnliche rezepte|rezeptideen mit ähnlichen zutaten|das gefällt anderen auch|das könnte (?:dir|dich) auch (?:gefallen|interessieren)|weitere rezepte|mehr rezepte|you might also like|more recipes|related recipes|recipe from\b)/i;
   // Kopfangaben von Rezeptseiten; der Wert steht oft in der nächsten Zeile („Vorbereitungszeit“ / „20Minuten Min.“)
   const META_TIME = /^(vorbereitungszeit|zubereitungszeit|arbeitszeit|koch-\s*\/\s*backzeit|kochzeit|backzeit|garzeit|ruhezeit|wartezeit|gesamtzeit|prep time|cook time|total time)\b\s*:?\s*(.*)$/i;
-  const META_TIME_LABEL = { vorbereitungszeit: "Vorbereitung", zubereitungszeit: "Zubereitung", arbeitszeit: "Arbeitszeit", "koch-/backzeit": "Kochen/Backen", kochzeit: "Kochen", backzeit: "Backen", garzeit: "Garen", ruhezeit: "Ruhen", wartezeit: "Warten", gesamtzeit: "gesamt", "prep time": "prep", "cook time": "cook", "total time": "total" };
+  // Kurze Bezeichnung nur mit Zeitwert: „Gesamt 35 Min“ (Cookidoo), „Prep: 15 mins“ (BBC), „Zeit: 25 Minuten“
+  const META_SHORT = /^(vorbereitung|zubereitung|gesamt|zeit|prep|cook|total|active|inactive)\s*:?\s+(.+)$/i;
+  const META_TIME_LABEL = { vorbereitungszeit: "Vorbereitung", zubereitungszeit: "Zubereitung", arbeitszeit: "Arbeitszeit", "koch-/backzeit": "Kochen/Backen", kochzeit: "Kochen", backzeit: "Backen", garzeit: "Garen", ruhezeit: "Ruhen", wartezeit: "Warten", gesamtzeit: "gesamt", preptime: "prep", cooktime: "cook", totaltime: "total", vorbereitung: "Vorbereitung", zubereitung: "Zubereitung", gesamt: "gesamt", zeit: "Zeit", prep: "prep", cook: "cook", total: "total", active: "active", inactive: "inactive" };
   // Zeitwert allein auf einer Zeile; bei Chefkoch steht er vor der Bezeichnung („55 Min.“ / „Gesamtzeit“)
-  const TIME_ONLY = /^(?:ca\.\s*)?\d+(?:[,.]\d+)?\s*(?:Minuten|Minute|Min\.?|Stunden?|Std\.?|h)(?:\s+\d+\s*(?:Minuten|Min\.?))?$/i;
-  // Bedienelemente kopierter Rezeptseiten
-  const UI_NOISE = /^(?:bring!.*|.*\bauf die einkaufsliste setzen|eigene kopie erstellen|create|drucken|teilen|merken|rezept speichern)$/i;
+  const TIME_ONLY = /^(?:ca\.|etwa|about|approx\.?)?\s*\d+(?:[,.]\d+)?\s*(?:minuten|minute|min\.?|mins|minutes|stunden?|std\.?|h|hrs?|hours?)(?:\s*(?:und|and)?\s*\d+\s*(?:minuten|min\.?|mins|minutes))?\.?$/i;
+  // Bedienelemente kopierter Rezeptseiten: Knöpfe, Portionsrechner („1/2x“, „Units“), Bewertungen („4,4/5 (47)“)
+  const UI_NOISE = /^(?:bring!.*|.*\bauf die einkaufsliste setzen|eigene kopie erstellen|create|drucken|rezept drucken|print(?: recipe)?|pin(?: recipe)?|pdf|teilen(?:ins kochbuch \d*)?|ins kochbuch(?: \d+)?|merken|rezept speichern|zurück zum kochbuch|einkaufsliste drucken|wie gesund sind die hauptzutaten\??|jump to (?:recipe|nutrition facts)|skip to (?:ingredients|recipe)|cook mode|prevent your screen from going dark|keep the screen awake.*|units(?:\s*:\s*\w+)?|us|metric|imperial|m|scale|\d+(?:\/\d+)?x|original recipe \(\d+x\) yields.*|get recipe ingredients|i made it|rate|freezable|nicht (?:in deiner lieferung|im lieferumfang) enthalten|\d+(?:[,.]\d+)?\s*\/\s*5(?:\s*\(\d+\))?|\(\d+\))$/i;
+  // Nur Hashtags („#pasta #onepot“)
+  const HASHTAGS = /^#[^\s#]+(?:\s+#[^\s#]+)*$/;
+  // Emojis und Bildzeichen; Aufzählungszeichen, die BULLET_RE kennt, bleiben
+  const KEEP_SIGNS = "▢☐□◻◽▪■○●◦✓✔☑";
+  let PICTO;
+  try { PICTO = new RegExp("[\\p{Extended_Pictographic}\\u{1F3FB}-\\u{1F3FF}\\uFE0F\\u200D]", "gu"); }
+  catch (e) { PICTO = /[\u2190-\u2BFF\uFE0F\u200D]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g; }
   // Mengenwörter statt Zahl in der Zutatenliste („etwas Muskat“, „n. B. Brühepulver“)
   const QTY_WORD = /^(etwas|viel|wenig|reichlich|n\.\s?b\.|nach bedarf)(?=\s|$)\s*/i;
-  const META_OTHER = /^(portionen|personen|servings|serves|kalorien|kcal|brennwert)\b/i;
+  const META_OTHER = /^(?:portionen|personen|servings|serves|yield|ergibt|kalorien|kcal|brennwert|schwierigkeit(?:sgrad)?|niveau|difficulty|kategorie|category|cuisine|küche|course|keywords?|diet|author|autor|allergene)\b|^portionsgröße|^method\s*:/i;
+  // Portionen: „4 Portionen“ allein, „Servings:“ / „8“, „2“ / „Portionen“ (Kitchen Stories), „für“ / „4“ / „Portionen“ (EAT SMARTER)
+  const SERV_LINE = /^(?:für\s+)?(\d+)\s*(?:portionen|portion|personen|portions?|servings?)$/i;
+  const SERV_LABEL = /^(?:portionen|personen|portionsgröße|servings|serves)$/i;
+  const SERV_WORD = /^(?:portionen|personen|portions?|servings?)$/i;
+  // Ofeneinstellung unter „Backofen vorheizen.“ (Dr. Oetker): „Ober-/Unterhitze: etwa 180 °C“
+  const OVEN_SET = /^(ober-\s*\/\s*unterhitze|umluft|heißluft|gas(?:herd)?|elektroherd|e-herd)\s*:\s*(.+)$/i;
+  // Mengen für andere Portionsgrößen (HelloFresh-Karte): „1 EL [1,5 EL I 2 EL] Öl“
+  const SIZE_VARIANTS = /\s*\[[^\]]*(?:\||\sI\s)[^\]]*\]/g;
   const BULLET_RE = /^(?:[*•·\-–]\s+|[▢☐□◻◽▪■○●◦✓✔☑]\s*)/;
   const TIP_RE = /^(?:(?:tipp|tip|hinweis|anmerkung)\b\s*:?|(?:info|achtung|wichtig|note)\s*:)\s*/i;
   // Nebenbei-Anweisungen, die zum vorigen Schritt gehören („ab und zu umrühren“, „falls nötig …“)
   const ASIDE_COND = /^(falls|bei bedarf|nach bedarf|gegebenenfalls|ggf\.?|wer (?:es|mag|möchte)|wenn (?:nötig|gewünscht|du magst|du möchtest))\b/i;
   const OCCASIONAL = /\b(ab und zu|hin und wieder|gelegentlich|immer wieder|zwischendurch|regelmäßig|öfter|öfters)\b/i;
   const STIR = new Set(["umrühren", "rühren", "durchrühren", "wenden", "schwenken"]);
-  const CHATTER = /\b(guten appetit|viel spaß|lass(?:t)? (?:es )?(?:dir|euch) schmecken|bon app[eé]tit)\b/i;
-  // Zahl („1,5“, „1½“, „½“), Spanne, Einheit; die Einheit muss als Wort enden („Minzblätter“ ist keine Zeit)
+  const CHATTER = /\b(guten appetit|viel spaß|lass(?:t)? (?:es )?(?:dir|euch) schmecken|bon app[eé]tit|speicher(?:e|t)? (?:dir |euch )?(?:das|dieses) rezept|folg(?:e|t) (?:mir|uns)|link in (?:der )?bio|save (?:this|the) recipe|follow (?:me|us) for)\b|^enjoy\b/i;
+  // Zahl („1,5“, „1½“, „½“), Spanne, Einheit; die Einheit muss als Wort enden („Minzblätter“ ist keine Zeit).
+  // Sekunden für Thermomix-Angaben („5 Sek./Stufe 5“)
   const DUR_NUM = "(\\d+(?:[,.]\\d+)?(?:\\s*[½¼¾])?|[½¼¾])";
-  const DUR_RE = new RegExp(DUR_NUM + "(?:\\s*(?:-|–|bis|to)\\s*" + DUR_NUM + ")?\\s*(Minuten|Minute|Min\\.?|mins?|minutes?|Std\\.?|Stunden?|h|hours?|hrs?)(?![A-Za-zÄÖÜäöüß])", "gi");
+  const DUR_RE = new RegExp(DUR_NUM + "(?:\\s*(?:-|–|bis|to)\\s*" + DUR_NUM + ")?\\s*(Minuten|Minute|Min\\.?|mins?|minutes?|Std\\.?|Stunden?|h|hours?|hrs?|Sek\\.?|Sekunden?|secs?|seconds?)(?![A-Za-zÄÖÜäöüß])", "gi");
   const TEMP_RE = /(\d{2,3})\s*(?:°\s*([CF])?|Grad\b(?:\s+(Celsius|Fahrenheit)\b)?)/i;
   const PRODUCT_PIECES = ["ringe", "ringen", "scheiben", "würfel", "streifen", "stifte", "spalten", "mischung", "masse", "soße", "sauce", "creme", "teig", "püree"];
   const NUMBER_WORDS = { ein: 1, eine: 1, einen: 1, einem: 1, einer: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, a: 1, an: 1, one: 1, two: 2, three: 3 };
@@ -109,7 +134,8 @@
 
   function servingsFrom(text, model) {
     const sm = text.match(/\(?\s*(?:für\s+|serves\s+|for\s+)?(\d+(?:[.,]\d+)?)\s*(?:-\s*\d+\s*)?(portionen|portion|personen|person|pers\.|stück|servings?|people)\s*\)?/i)
-      || text.match(/\b(?:serves|für|portionen|servings)\s*:?\s+(\d+)\b/i);
+      || text.match(/\b(?:serves|für|portionen|servings)\s*:?\s+(\d+)\b/i)
+      || text.match(/\bportionsgröße\s*:?\s*(\d+)\b/i);
     if (!sm) return text;
     if (!model.servings) model.servings = parseFloat(sm[1].replace(",", "."));
     return (text.slice(0, sm.index) + text.slice(sm.index + sm[0].length)).replace(/\(\s*\)/g, "").replace(/\s{2,}/g, " ").replace(/[\s(,–-]+$/, "").trim();
@@ -169,8 +195,17 @@
     return parts;
   }
 
+  // Englische Zubereitungsangabe hinter dem Namen: „1 onion finely chopped“, „2 garlic cloves crushed“
+  const EN_PREP = /^(.*?[a-z])\s+((?:(?:finely|roughly|thinly|coarsely|freshly|lightly)\s+)?(?:chopped|sliced|diced|minced|crushed|grated|peeled|halved|quartered|deseeded|seeded|drained|rinsed|trimmed|softened|melted|beaten|sifted|torn|shredded|cubed|picked|cut)\b.*)$/;
+
   function parseIngredientLine(line) {
-    let s = line.trim().replace(/^[*•·\-–▢☐□◻◽▪■○●◦✓✔☑]\s*/, "").replace(/\*\*/g, "").trim();
+    // Markdown-Aufgabe „- [ ] …“, Hervorhebung „_optional:_“, Mengen anderer Portionsgrößen „[15 g | 20 g]“,
+    // Vorrats-Sternchen „Öl*“, Allergen-Nummern „Parmesan (7)“
+    let s = line.trim().replace(/^[*•·\-–▢☐□◻◽▪■○●◦✓✔☑]\s*/, "").replace(/^\[[ xX]?\]\s*/, "").replace(/\*\*/g, "")
+      .replace(/(^|\s)_([^_]+)_(?=\s|$|[:,])/g, "$1$2").replace(SIZE_VARIANTS, "").replace(/(\S)\*+(?=\s|,|$)/g, "$1")
+      .replace(/\s*\(\d+(?:\s*,\s*\d+)*\)/g, "").trim();
+    // „2 x 400g tins chopped tomatoes“ → 2 tins (400g); „400g tin kidney beans“ → 1 tin (400g)
+    s = s.replace(/^(\d+)\s*[x×]\s*(\d+\s*(?:g|ml|oz))\s+(tins?|cans?|dosen?)\b/i, "$1 $3 ($2)").replace(/^(\d+\s*(?:g|ml|oz))\s+(tins?|cans?)\b/i, "1 $2 ($1)");
     let optional = false;
     const om = s.match(/^(optional|nach belieben|evtl\.?|wahlweise|nach geschmack)\s*:?\s*/i);
     if (om) { optional = true; s = s.slice(om[0].length); }
@@ -208,8 +243,16 @@
     if (ci >= 0) { name = s.slice(0, ci).trim(); note = s.slice(ci + 1).trim(); }
     const fm = name.match(/\s+(für|zum|zur|zu|for)\s+.+$/i);
     if (fm) { note = [fm[0].trim(), note].filter(Boolean).join(", "); name = name.slice(0, fm.index).trim(); }
+    // „Salz/Jodsalz“, „Parmesan/Grana Padano“ (WW): die zweite Angabe ist eine Alternative
+    const sl = name.match(/^([A-ZÄÖÜ][\wäöüß-]*)\/([A-ZÄÖÜ].*)$/);
+    if (sl) { name = sl[1]; note = [sl[2], note].filter(Boolean).join(", "); }
     const sh = splitHead(name);
+    const en = !sh && name.match(EN_PREP);
     if (sh) { note = [sh.note, note].filter(Boolean).join(", "); name = sh.name; }
+    else if (en) { note = [en[2], note].filter(Boolean).join(", "); name = en[1]; }
+    // „2 garlic cloves“, „3 rosemary sprigs“: englische Einheit hinter dem Namen
+    const eu = !unit && !sh && name.match(/^([a-z][a-z ]*?)\s+(cloves?|sprigs?|sticks?|stalks?|rashers?)$/);
+    if (eu) { unit = eu[2]; name = eu[1]; }
     // Größe gehört nicht zum Namen: „mittelgroße Kartoffeln“
     const sz = name.match(/^((?:sehr\s+)?(?:mittel)?(?:groß|gross|klein)(?:e|er|es|en)?)\s+(?=[A-ZÄÖÜ])/);
     if (sz) { note = [sz[1], note].filter(Boolean).join(", "); name = name.slice(sz[0].length); }
@@ -228,35 +271,64 @@
   /** "strong": Zeile ist sicher nur eine Menge („2 EL“, „1“, „etwas“); "weak": vielleicht („6 m.-große“, aber auch „2 Eier“). */
   function amountOnly(t) {
     if (QTY_WORD.test(t) && !t.replace(QTY_WORD, "")) return "strong";
-    const m = t.match(AMOUNT_ONLY);
+    const m = t.replace(/\((?:n|en|e|s)\)/g, "").match(AMOUNT_ONLY);
     if (!m) return "";
     return !m[1] || lex.UNIT_MAP[m[1].toLowerCase()] ? "strong" : "weak";
   }
 
   /** Chefkoch und ähnliche Seiten setzen Menge, Zutat und Zusatz in eigene Zeilen
    *  („2 EL“ / „Margarine“, „1 Pck.“ / „Sahne“ / „oder Sojasahne, ca. 200 ml“). Erkannt wird das
-   *  an mehreren Zeilen, die nur aus einer Menge bestehen; dann werden die Teile zusammengesetzt. */
+   *  an mehreren Zeilen, die nur aus einer Menge bestehen; dann werden die Teile zusammengesetzt.
+   *  Cookidoo und WW stellen den Namen voran („Zwiebel“ / „halbiert“ / „1“, „Knoblauch“ / „1 Zehe(n)“),
+   *  Cookidoo zudem die Einheit in eine eigene Zeile („20“ / „g“). */
   function joinSplitLines(texts) {
-    const ts = texts.map((t) => t.trim());
+    const ts = [];
+    for (const t of texts.map((x) => x.trim())) {
+      const p = ts[ts.length - 1];
+      if (p && /^\d+(?:[,.]\d+)?(?:\s*[-–]\s*\d+(?:[,.]\d+)?)?$/.test(p) && lex.UNIT_MAP[t.toLowerCase()]) ts[ts.length - 1] = p + " " + t;
+      else ts.push(t);
+    }
+    // Menge hinter dem Namen, wahlweise mit Zusatz („1 Stück, mittelgroß“): erste Zeile ein Name, letzte eine Menge
+    const heads = ts.map((t) => amountOnly(t.split(/,\s*/)[0]));
+    if (ts.length > 2 && !heads[0] && heads[heads.length - 1] && heads.filter((k) => k === "strong").length >= 2) return nameFirst(ts, heads);
     const kinds = ts.map(amountOnly);
     const nameAt = (i) => i < ts.length && !kinds[i];
-    if (kinds.filter((k, i) => k === "strong" && nameAt(i + 1)).length < 2) return texts;
+    if (kinds.filter((k, i) => k === "strong" && nameAt(i + 1)).length < 2) return ts;
     const out = [];
     for (let i = 0; i < ts.length; i++) {
       if (kinds[i]) {
         if (nameAt(i + 1)) out.push(ts[i] + " " + ts[++i]);
         else if (kinds[i] === "weak") out.push(ts[i]);
         // sonst Menge ohne Zutat, etwa der Portionswähler („4“)
-      } else if (/^[a-zäöüß]/.test(ts[i]) && out.length) out[out.length - 1] += ", " + ts[i];
+      } else if (/^[a-zäöüß(]/.test(ts[i]) && out.length) out[out.length - 1] += ", " + ts[i];
       else out.push(ts[i]);
     }
     return out;
   }
 
+  /** Name vor der Menge: der erste Name gehört zur Menge, kleingeschriebene Zeilen danach sind Zusätze,
+   *  großgeschriebene eigene Zutaten ohne Menge. */
+  function nameFirst(ts, kinds) {
+    const out = [];
+    let names = [];
+    for (let i = 0; i < ts.length; i++) {
+      if (!kinds[i]) { names.push(ts[i]); continue; }
+      const [amount, ...tail] = ts[i].split(/,\s*/);
+      const groups = [];
+      for (const n of names) if (!groups.length || /^[A-ZÄÖÜ]/.test(n)) groups.push([n]); else groups[groups.length - 1].push(n);
+      const own = groups.pop() || [];
+      for (const g of groups) out.push(g.join(", "));
+      const extra = own.slice(1).concat(tail).map((x) => x.replace(/^\((.*)\)$/, "$1"));
+      out.push([(amount + " " + (own[0] || "")).trim(), ...extra].join(", "));
+      names = [];
+    }
+    return out.concat(names);
+  }
+
   /** „20Minuten Min.“ → „20 Min.“, „1Stunde Std.“ → „1 Std.“ */
   function timeValue(v) {
     const out = []; let m;
-    const re = /(\d+(?:[,.]\d+)?)\s*(stunden?|std\.?|h\b|minuten?|min\.?)/gi;
+    const re = /(\d+(?:[,.]\d+)?)\s*(stunden?|std\.?|hours?|hrs?|h\b|minuten?|min\.?)/gi;
     while ((m = re.exec(v))) out.push(m[1] + (/^(s|h)/i.test(m[2]) ? " Std." : " Min."));
     return out.length ? out.join(" ") : v.trim();
   }
@@ -268,7 +340,7 @@
     if (ts.length < 4 || ts.filter(endsSentence).length * 2 < ts.length) return stepLines;
     return stepLines.filter((L, i) => {
       const t = ts[i];
-      if (!i || isNumberedStep(t) || BULLET_RE.test(t) || /[.!?…:;)]$/.test(t) || !endsSentence(ts[i - 1]) || t.length > 100) return true;
+      if (!i || isNumberedStep(t) || BULLET_RE.test(t) || /[.!?…:;)]$/.test(t) || !endsSentence(ts[i - 1]) || t.length > 100 || OVEN_SET.test(t)) return true;
       const v = findVerb(t, { guess: false });
       return !!(v && v.finite);
     });
@@ -280,60 +352,128 @@
     const model = M.emptyModel();
     const src = String(text || "").replace(/\r\n?/g, "\n");
     model.source = src;
+    // Emojis stören die Erkennung („🛒 Zutaten:“, „1️⃣ …“). Gleich lang ersetzen, damit die Textstellen zur Quelle passen.
+    const plain = src.replace(/(\d)\uFE0F?\u20E3/g, (m, d) => d + "." + " ".repeat(m.length - 2))
+      .replace(PICTO, (m) => (KEEP_SIGNS.includes(m) ? m : " ".repeat(m.length)));
     const lines = []; let off = 0;
-    for (const l of src.split("\n")) { lines.push({ text: l, start: off }); off += l.length + 1; }
+    for (const l of plain.split("\n")) { lines.push({ text: l, start: off }); off += l.length + 1; }
 
     const cleanOf = (t) => t.replace(/^#+\s*/, "").replace(/\*\*/g, "").replace(/:\s*$/, "").trim();
     // „Für die Soße:“ ist eine Überschrift, „Für die Soße die Zwiebel würfeln.“ nicht
     const isIngHdr = (c, t) => ING_HDR.test(c) && c.length < 60 &&
       (!/^für\b/i.test(c) || /:$/.test(t) || (c.split(/\s+/).length <= 4 && !endsSentence(c) && !findVerb(c, { guess: false })));
-    const isStepHdr = (c) => STEP_HDR.test(c) && c.length < 80;
-    const hasHeader = lines.some((L) => { const t = L.text.trim(), c = cleanOf(t); return isIngHdr(c, t) || isStepHdr(c); });
+    // „Zubereitung“, „Zubereitung (ca. 30 Min.)“: Überschrift; „Zubereitung 10 Min.“: vielleicht nur eine Zeitangabe; „Method: Oven“: keins
+    const stepHdr = (c) => {
+      const m = c.match(STEP_HDR);
+      if (!m || c.length >= 80) return "";
+      const rest = c.slice(m[0].length).replace(/^\s*:?\s*/, "");
+      return !rest || /^\(/.test(rest) ? "plain" : TIME_ONLY.test(rest) ? "time" : "";
+    };
+    const cleans = lines.map((L) => cleanOf(L.text.trim()));
+    const hasHeader = lines.some((L, i) => isIngHdr(cleans[i], L.text.trim()) || stepHdr(cleans[i]));
+    // nur „Zutaten“ selbst; vor „Für die Soße:“ kann schon die erste Zutatenliste stehen
+    const firstIng = lines.findIndex((L, i) => /^(zutaten|ingredients|einkaufsliste)\b/i.test(cleans[i]) && isIngHdr(cleans[i], L.text.trim()));
     const nextLine = (i) => { for (let j = i + 1; j < lines.length; j++) if (lines[j].text.trim()) return j; return -1; };
+    // Folgt noch eine echte Überschrift oder Schrittmarke, ist „Zubereitung 10 Min.“ eine Kopfangabe (Kitchen Stories, Cookidoo)
+    const laterSteps = (i) => cleans.some((c, j) => j > i && (STEP_MARK.test(c) || stepHdr(c) === "plain"));
     const timeLabel = (s) => META_TIME_LABEL[s.toLowerCase().replace(/\s+/g, "")] || s;
 
-    let mode = null, titleDone = false, metaLabel = null;
-    const ingLines = [], stepLines = [], times = [], skip = new Set();
+    let mode = null, titleDone = false, metaLabel = null, prevClean = "";
+    const ingLines = [], stepLines = [], noteLines = [], times = [], skip = new Set();
+    const addTime = (name, v) => { const tv = timeValue(v); if (/[1-9]/.test(tv)) times.push(name + " " + tv); };
+    const setServings = (v) => { if (!model.servings) model.servings = parseFloat(v); };
+    /** Eine Kopfangabe; true, wenn die Zeile damit erledigt ist. */
+    const meta1 = (c, i) => {
+      const tm = c.match(META_TIME);
+      if (tm) {
+        const name = timeLabel(tm[1]);
+        if (tm[2].trim()) addTime(name, tm[2]); else metaLabel = { kind: "time", name };
+        return true;
+      }
+      const sm = c.match(META_SHORT);
+      if (sm && TIME_ONLY.test(sm[2].trim())) { addTime(timeLabel(sm[1]), sm[2]); return true; }
+      if (TIME_ONLY.test(c) && i != null) {
+        const j = nextLine(i), nm = j >= 0 && cleans[j].match(META_TIME);
+        if (nm && !nm[2].trim()) { addTime(timeLabel(nm[1]), c); skip.add(j); return true; }
+      }
+      const sv = c.match(SERV_LINE);
+      if (sv) { setServings(sv[1]); return true; }
+      if (SERV_LABEL.test(c)) { metaLabel = { kind: "servings" }; return true; }
+      if (META_OTHER.test(c)) {
+        servingsFrom(c, model);
+        // Bezeichnung allein („Schwierigkeitsgrad“, „Kalorien:“): der Wert steht in der nächsten Zeile
+        if (c.split(/\s+/).length <= 3 && !/[\d:]/.test(c)) metaLabel = { kind: "skip" };
+        return true;
+      }
+      return false;
+    };
+    // mehrere Angaben in einer Zeile: „Gesamtzeit: 30 Min • Portionen: 2“, „Arbeitszeit: ca. 20 Min. / Koch-/Backzeit: …“
+    const metaLine = (c, i) => {
+      const segs = c.split(/\s+[•|\/]\s+/);
+      if (segs.length > 1 && meta1(segs[0])) { segs.slice(1).forEach((x) => meta1(x)); return true; }
+      return meta1(c, i);
+    };
+
     for (let i = 0; i < lines.length; i++) {
       const L = lines[i];
       const t = L.text.trim();
-      if (!t || mode === "end" || skip.has(i)) continue;
-      const clean = cleanOf(t);
-      if (UI_NOISE.test(clean)) continue;
-      if (END_HDR.test(clean) && clean.length < 80) { mode = "end"; continue; }
+      if (!t || skip.has(i) || HASHTAGS.test(t)) continue;
+      const clean = cleans[i], prevC = prevClean;
+      prevClean = clean;
+      // Wert zur Bezeichnung der Zeile davor
+      if (metaLabel) {
+        const ml = metaLabel; metaLabel = null;
+        if (ml.kind === "time" && /\d/.test(t) && t.length < 40) { addTime(ml.name, t); continue; }
+        if (ml.kind === "servings" && /^\d+$/.test(clean)) { setServings(clean); continue; }
+        if (ml.kind === "skip" && clean.length < 30 && !isIngHdr(clean, t) && !stepHdr(clean)) continue;
+      }
+      if (mode === "end") {
+        if (stepLines.length) continue;
+        if (!isIngHdr(clean, t) && !stepHdr(clean) && !STEP_MARK.test(clean)) { metaLine(clean, i); continue; }
+        mode = null;
+      }
+      if (UI_NOISE.test(clean) || /^(für|for)$/i.test(clean)) continue;
+      // „Nutrition“ direkt unter „Ingredients“ ist ein Reiter (BBC), kein Ende
+      if (END_HDR.test(clean) && clean.length < 80) { if (mode !== "ing" || ingLines.length) mode = "end"; continue; }
       if (isIngHdr(clean, t)) { mode = "ing"; metaLabel = null; servingsFrom(clean, model); continue; }
-      if (isStepHdr(clean)) {
+      const sh = stepHdr(clean);
+      if (sh && !(laterSteps(i) && (sh === "time" || TIME_ONLY.test(cleans[nextLine(i)] || "")))) {
         mode = "steps"; metaLabel = null;
         const pm = clean.match(/\(([^)]*)\)/) || clean.match(/:\s*(.+)$/);
         if (pm && !times.length) model.statedTime = pm[1].trim();
         continue;
       }
-      // Kopfangaben stehen auch direkt unter „Zubereitung“, vor dem ersten Schritt
-      if (mode !== "steps" || !stepLines.length) {
-        const label = metaLabel; metaLabel = null;
-        if (label && /\d/.test(t) && t.length < 40) { times.push(label + " " + timeValue(t)); continue; }
-        const tm = clean.match(META_TIME);
-        if (tm) {
-          const name = timeLabel(tm[1]);
-          if (tm[2].trim()) times.push(name + " " + timeValue(tm[2])); else metaLabel = name;
-          continue;
-        }
-        if (TIME_ONLY.test(clean)) {
-          const j = nextLine(i), nm = j >= 0 && cleanOf(lines[j].text.trim()).match(META_TIME);
-          if (nm && !nm[2].trim()) { times.push(timeLabel(nm[1]) + " " + timeValue(clean)); skip.add(j); continue; }
-        }
-        if (META_OTHER.test(clean)) { servingsFrom(clean, model); continue; }
+      if (sh === "plain") { metaLabel = { kind: "time", name: timeLabel(clean) }; continue; }
+      if (STEP_MARK.test(clean)) { mode = "steps"; stepLines.push(L); continue; }
+      if (EQUIP_HDR.test(clean)) { mode = "equip"; continue; }
+      if (NOTES_HDR.test(clean) && stepLines.length) { mode = "notes"; continue; }
+      if (mode === "equip") continue;
+      if (mode === "notes") { if (!metaLine(clean, i)) noteLines.push(L); continue; }
+      // „2“ / „Portionen“: die Zahl davor ist die Portionenzahl, keine Zutat
+      if (SERV_WORD.test(clean) && /^\d+$/.test(prevC)) {
+        setServings(prevC);
+        if (ingLines.length && ingLines[ingLines.length - 1].text.trim() === prevC) ingLines.pop();
+        continue;
       }
+      // Kopfangaben stehen auch direkt unter „Zubereitung“, vor dem ersten Schritt
+      if (mode !== "steps" || !stepLines.length) { if (metaLine(clean, i)) continue; }
+      else if (META_OTHER.test(clean) && clean.split(/\s+/).length <= 2 && !/\d/.test(clean)) { metaLabel = { kind: "skip" }; continue; }
       if (!titleDone && mode === null && !isListLine(t)) {
         // „Für 4 Portionen“ ohne Titel: nur die Portionen lesen
         const title = servingsFrom(clean, model);
         if (title) { model.title = title; titleDone = true; }
         continue;
       }
-      if (mode === "ing") ingLines.push(L);
+      if (mode === "ing") {
+        // Gruppen („Rührteig:“, „Zum Bestäuben:“, „For the chilli“, „To serve“), Allergene, verklebte Linklisten
+        const group = !/\d/.test(clean) && clean.split(/\s+/).length <= 5 && (/:$/.test(t.replace(/\*+$/, "")) || /^(for the|to serve|for serving|to garnish|for garnish)\b/i.test(clean));
+        if (group || /^\((?:enthält|kann spuren)/i.test(clean) || (!/\s/.test(clean) && (clean.match(/[a-zäöüß][A-ZÄÖÜ]/g) || []).length >= 2)) continue;
+        ingLines.push(L);
+      }
       else if (mode === "steps") stepLines.push(L);
       else if (isNumberedStep(t)) stepLines.push(L);
-      else if (isListLine(t)) ingLines.push(L);
+      // Aufzählung vor der Zutaten-Überschrift ist Einleitung („Why It Works“, Bewertungen, Kalorien)
+      else if (isListLine(t)) { if (i > firstIng) ingLines.push(L); }
       // ohne Überschriften: kurze Zeile ohne Satzzeichen und Verb im Zutatenblock ist eine Zutat („Salz“)
       else if (!hasHeader && ingLines.length && !stepLines.length && t.length < 40 && !endsSentence(t) && !findVerb(t, { guess: false })) ingLines.push(L);
       else if (!hasHeader) stepLines.push(L);
@@ -347,30 +487,66 @@
     }
     for (const z of model.ingredients) z._keys = M.keysFor(z.name);
 
-    // Schrittnummer allein auf einer Zeile („1“ / „Zuerst …“)
+    // Zwischenüberschrift (Dr. Oetker: „Vorbereiten“, „Rührteig zubereiten“): kurz, ohne Zutat, vor einem Absatz
+    const heading = (L, i) => {
+      const h = L.text.trim(), nx = stepLines[i + 1] && stepLines[i + 1].text.trim();
+      if (h.length > 30 || h.split(/\s+/).length > 3 || /[\d.!?…;,()/]/.test(h) || BULLET_RE.test(h) || !nx || !endsSentence(nx) || nx.length < 30) return false;
+      return !words(h).some((w) => !lex.V[w.lw] && model.ingredients.some((z) => z._keys.some((k) => M.tokenMatchesKey(w.lw, k))));
+    };
+    let heads = stepLines.filter(heading);
+    if (heads.length < 2) heads = heads.filter((L) => /:$/.test(L.text.trim()));
+    // Schrittnummer allein auf einer Zeile („1“ / „Zuerst …“), Schrittmarke, Zwischenüberschrift
     const numberedNext = new Set();
     const bodyLines = stepLines.filter((L, i) => {
-      if (!/^\s*\d+\s*[.)]?\s*$/.test(L.text)) return true;
+      if (!/^\s*\d+\s*[.)]?\s*$/.test(L.text) && !STEP_MARK.test(cleanOf(L.text.trim())) && !heads.includes(L)) return true;
       if (stepLines[i + 1]) numberedNext.add(stepLines[i + 1]);
       return false;
     });
+    // Mit Schrittmarken gehören alle Zeilen bis zur nächsten Marke zum selben Schritt (HelloFresh: ein Satz je Zeile)
+    const marked = numberedNext.size > 0;
     const st = { model, holder: new Map(), consumed: new Set(), prev: null, pendingNotes: [], equip: new Map(), n: 0, mediumAt: new Map(), medium: new Map() };
     for (const L of dropCaptions(bodyLines)) {
-      const lead = L.text.match(/^\s*(?:(\d+)\s*[.)]|[*•·\-–▢☐□◻◽▪■○●◦✓✔☑])?\s*/);
-      const body = L.text.slice(lead[0].length);
+      // „1Aubergine …“: Nummer ohne Punkt direkt am Text (lecker.de)
+      const lead = L.text.match(/^\s*(?:(\d+)\s*[.)]|(\d+)(?=[A-ZÄÖÜ][a-zäöüß])|[*•·\-–▢☐□◻◽▪■○●◦✓✔☑])?\s*/);
+      // Fettdruck, Mengen anderer Portionsgrößen und Vorrats-Sternchen gleich lang ausblenden
+      const body = L.text.slice(lead[0].length).replace(/\*\*|__/g, "  ").replace(SIZE_VARIANTS, (m) => " ".repeat(m.length)).replace(/(\S)\*(?=[\s,.;:]|$)/g, "$1 ");
       if (!body.trim()) continue;
       // Tipp-Absatz: alles darin ist Hinweis zum vorigen Schritt, auch Sätze mit Verben
       const tip = body.match(TIP_RE);
-      if (tip && !lead[1]) { attach(st, "note", body.slice(tip[0].length).trim()); continue; }
-      const numbered = !!lead[1] || numberedNext.has(L) || /^\s*[*•·\-–▢☐□◻◽▪■○●◦✓✔☑]/.test(L.text);
-      if (numbered || !st.n || /^[A-ZÄÖÜ]/.test(body)) st.n++;
+      if (tip && !lead[1] && !lead[2]) { attach(st, "note", body.slice(tip[0].length).trim()); continue; }
+      if (ovenSetting(st, body)) continue;
+      const numbered = !!(lead[1] || lead[2]) || numberedNext.has(L) || /^\s*[*•·\-–▢☐□◻◽▪■○●◦✓✔☑]/.test(L.text);
+      if (numbered || !st.n || (!marked && /^[A-ZÄÖÜ]/.test(body))) st.n++;
       processItem(st, body.replace(/\s+$/, ""), L.start + lead[0].length);
     }
+    // Anmerkungen nach der Zubereitung gehören zum fertigen Gericht
+    const dish = model.steps[model.steps.length - 1];
+    if (dish) for (const L of noteLines) appendField(dish, "note", L.text.trim().replace(BULLET_RE, ""));
     for (const z of model.ingredients) delete z._keys;
     return model;
   }
 
+  /** „Ober-/Unterhitze: etwa 180 °C“ unter „Backofen vorheizen.“: Temperatur des Vorheizens, weitere Varianten als Hinweis. */
+  function ovenSetting(st, body) {
+    const m = body.trim().match(OVEN_SET);
+    if (!m) return false;
+    const pre = st.model.steps.slice().reverse().find((s) => /^(vorheizen|preheat)$/.test(s.verb));
+    const tm = m[2].match(TEMP_RE);
+    if (pre && tm && !pre.temp) {
+      pre.temp = tm[1] + " °" + (tm[2] || "C").toUpperCase();
+      pre.detail = [pre.detail, m[1]].filter(Boolean).join(", ");
+    } else if (pre) appendField(pre, "note", body.trim());
+    else attach(st, "note", body.trim());
+    return true;
+  }
+
   function processItem(st, text, absStart) {
+    // Zwischentitel vor dem Schritt („Gemüse schneiden: Zwiebel … würfeln“) ist keine Handlung, wenn danach ein eigenes Verb folgt;
+    // „Würfeln: Zwiebel, Paprika“ bleibt eine Handlung (siehe processSentence)
+    const lm = text.match(/^\s*([A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]*(?:\s+[\wÄÖÜäöüß-]+){0,3})\s*:\s+/);
+    if (lm && !/^(tipp|tip|hinweis|info|achtung|wichtig|note|anmerkung)$/i.test(lm[1]) && findVerb(text.slice(lm[0].length), { guess: false })) {
+      text = " ".repeat(lm[0].length) + text.slice(lm[0].length);
+    }
     const prot = text.replace(ABBR_RE, (m) => m.slice(0, -1) + "\u0001");
     const bounds = []; let last = 0, m;
     const bre = /[.!?]+(?:\s+|$)/g;
@@ -478,7 +654,7 @@
       segs.splice(i, 1, { a: g.a, b: cut, join: g.join }, { a: cut, b: g.b, join: "und" });
     }
     // Infinitiv am Ende („Zwiebeln schälen, Knoblauch hacken“): Teile davor gehören zum Verb.
-    // Gebeugtes Verb vorn („gibst du die Butter, die Zwiebeln … in den Topf“): Teile danach gehören dazu.
+    // Gebeugtes Verb vorn („gibst du die Butter, die Zwiebeln … in den Topf“) und Englisch („Add the tomatoes and beans“): Teile danach gehören dazu.
     const groups = []; let pending = [], openFinite = false;
     for (const g of segs) {
       const t = core.slice(g.a, g.b);
@@ -486,7 +662,7 @@
       const v = findVerb(t);
       if (!v && openFinite) { groups[groups.length - 1].push(g); continue; }
       pending.push(g);
-      if (v) { groups.push(pending); pending = []; openFinite = v.finite; }
+      if (v) { groups.push(pending); pending = []; openFinite = v.finite || v.en; }
     }
     if (pending.length) { if (groups.length) groups[groups.length - 1].push(...pending); else groups.push(pending); }
 
@@ -648,6 +824,7 @@
     const hours = /^(std|stunde|h|hour|hr)/i.test(m[3]);
     let a = val(m[1]), b = m[2] ? val(m[2]) : a;
     if (a == null || b == null) return null;
+    if (/^(sek|sec)/i.test(m[3])) return { min: a / 60, max: b / 60 };
     if (hours) {
       a *= 60; b *= 60;
       // Minuten direkt dahinter gehören dazu, aber nicht zu einer Spanne („1-2 Std.“)
@@ -683,7 +860,7 @@
 
   // Verben, die etwas in eine bestehende Masse einarbeiten
   const INTO = new Set(["unterheben", "unterrühren", "unterziehen", "untermischen", "einrühren", "unterarbeiten", "unterkneten", "fold"]);
-  const MASS_WORD = /(?<![-\wäöüß])(teig|masse|mischung|batter|dough|mixture)(?![-\wäöüß])/i;
+  const MASS_WORD = /(?<![-\wäöüß])(teig(?:e?s)?|masse|mischung|batter|dough|mixture)(?![-\wäöüß])/i;
   const verbClass = (s) => (lex.V[String(s.verb).toLowerCase().split(" ")[0]] || {}).cls;
 
   function reachesCombine(model, ref, seen) {
@@ -737,6 +914,8 @@
     return best;
   }
 
+  const SEASONING = /^(?:salz|pfeffer|salt|pepper|black pepper|schwarzer pfeffer)$/i;
+
   // Verben, die das Gargut aus seiner Flüssigkeit holen
   const TAKE_OUT = new Set(["herausnehmen", "herausheben", "abschöpfen", "abgießen", "abseihen"]);
 
@@ -765,6 +944,8 @@
     let verb = info.labelVerb
       ? { key: info.labelVerb, display: info.labelVerb, cls: lex.V[info.labelVerb].cls, k: -1 }
       : findVerb(body) || { key: "", display: "?", cls: "other", k: -1 };
+    // „Stir in the garlic“, „fold in the flour“: etwas ins Gericht geben
+    if (verb.en && new RegExp("^\\s*" + verb.key + "\\s+in\\b", "i").test(body)) verb = Object.assign({}, verb, { cls: "add" });
     const step = {
       id: M.newId(model, "s"), verb: verb.display, detail: "", inputs: [], dur: null, temp: "", passive: lex.PASSIVE.has(verb.key) || / lassen$/.test(verb.display),
       repeat: "", cue: info.cue || "", note: "", product: "", src: info.src || body.trim(), srcStep: st.n,
@@ -787,6 +968,15 @@
     }
     const known = model.ingredients.length;
     const mentions = findMentions(st, body, skip).sort((a, b) => a.pos - b.pos);
+    // „in den Backofen schieben und etwa 55 Minuten backen“: ein Backschritt, die Dauer gehört zum ersten
+    const pv = st.prev;
+    if (lex.OVEN.has(verb.key) && pv && pv.verb === step.verb && !pv.dur && pv.srcStep === st.n && !st.consumed.has(pv.id) && !mentions.some((x) => x.kind === "ingredient")) {
+      pv.dur = step.dur; pv.temp = pv.temp || step.temp;
+      pv.detail = [pv.detail, step.detail].filter(Boolean).join(", ");
+      if (step.cue) pv.cue = step.cue;
+      pv.src += " " + step.src; pv.srcRange[1] = step.srcRange[1];
+      return;
+    }
     // „Dazu nach Belieben Parmesan reichen“: nicht gelistete Zutat ist optional
     if (/\b(nach belieben|optional|wer mag)\b/i.test(body)) for (const z of model.ingredients.slice(known)) z.optional = true;
 
@@ -798,6 +988,12 @@
     };
     const fullRaw = [];
     let ovenMention = false;
+    const newContainer = /\b(in|auf)\s+(eine|einer|einen|einem|ein)\s+(?:[a-zäöüß]+\s+)?[\wäöüß-]*(schüssel|topf|pfanne|form|blech|bräter|glas|kasserolle)\b|\b(in|into)\s+an?\s+(?:\w+\s+)?(bowl|pan|pot|dish|skillet)\b/i.test(body);
+    // nur Begleitzutaten: „mit 1 EL Öl und Salz mischen“, „abwechselnd mit der Milch unterrühren“
+    const AMOUNT_GAP = "(?:(?:der|dem|den|etwas|\\d+(?:[,.]\\d+)?\\s+\\S+)\\s+)?(?:[a-zäöüß]+\\s+)?$";
+    const alongOnly = mentions.length > 0 && mentions.every((x) => x.kind === "ingredient") &&
+      new RegExp("\\bmit\\s+" + AMOUNT_GAP, "i").test(body.slice(Math.max(0, mentions[0].pos - 40), mentions[0].pos)) &&
+      mentions.every((x, k) => !k || new RegExp("^[\\s,]*(?:und|sowie|and)?\\s*" + AMOUNT_GAP, "i").test(body.slice(mentions[k - 1].pos + mentions[k - 1].word.length, x.pos)));
 
     const media = [], mediumRefs = new Set(), filled = [];
     for (const men of mentions) {
@@ -830,9 +1026,13 @@
       const hUsable = h && !st.consumed.has(h);
       const portionText = men.portion ? men.portion.text : "";
       if (men.modifier) { addInput(z.id, portionText); continue; }
+      // Salz und Pfeffer kommen immer wieder frisch dazu; eine neue Prise holt nicht das Gericht, in dem die erste steckt
+      if (hUsable && SEASONING.test(z.name) && !men.productToken && (currentDish(st, step) || {}).id !== h) { addInput(z.id, portionText); continue; }
       if (hUsable && (!men.portion || men.productToken)) {
         const cur = currentDish(st, step);
-        if (verb.cls === "add" && cur && cur.id === h && !men.productToken) {
+        // „mit Salz abschmecken“ am Gericht, das schon Salz enthält: der Rest. „die Kartoffeln …“, „… in einen Topf geben“: das Gericht selbst
+        const definite = /\b(?:der|die|das|den|dem|des|the)\s+(?:[a-zäöüß]+\s+)?$/i.test(body.slice(Math.max(0, men.pos - 25), men.pos));
+        if (verb.cls === "add" && cur && cur.id === h && !men.productToken && !newContainer && !definite) {
           addInput(z.id, portionText || "Rest");
         } else {
           addInput(h, men.productToken ? portionText : "");
@@ -846,6 +1046,15 @@
       }
     }
 
+    // „Gemüse darin andünsten“: alle offenen, geschnittenen Zutaten
+    if (/(?:^|[^-\wäöüß])gemüse(?![-\wäöüß])/i.test(body) && !mentions.some((x) => x.kind === "ingredient" && /^gemüse$/i.test(x.word))) {
+      for (const s of model.steps) if (!st.consumed.has(s.id) && verbClass(s) === "prep" && !equipmentLed(model, s)) addInput(s.id);
+    }
+    // „Form fetten“, „ausbuttern“ ohne genannte Zutat: das gelistete Fett, die Butter
+    if (verb.cls === "equip" && !mentions.some((x) => x.kind === "ingredient")) {
+      const z = model.ingredients.find((x) => x._keys.some((k) => k.length >= 4 && verb.key.includes(k)));
+      if (z) addInput(z.id, "");
+    }
     // „in den heißen Backofen stellen“: das ist Backen
     if (ovenMention && /^(stellen|schieben|geben|setzen)$/.test(verb.key) && /\bin\s+den\s+(?:[a-zäöüß]+\s+)?(?:back)?ofen\b/i.test(body)) {
       verb = { key: "backen", display: "backen", cls: "heat", k: -1 };
@@ -862,8 +1071,8 @@
     // Fortsetzung des aktuellen Gerichts
     const isStepRef = (ref) => model.steps.some((x) => x.id === ref);
     const rawIngredients = inputs.filter((x) => model.ingredients.some((z) => z.id === x.ref));
-    const anaphor = /\b(darin|darauf|dazu|hinein|daran|darüber|obenauf|in it|on top|over it)\b/i.test(body);
-    const newContainer = /\b(in|auf)\s+(eine|einer|einen|einem|ein)\s+(?:[a-zäöüß]+\s+)?[\wäöüß-]*(schüssel|topf|pfanne|form|blech|bräter|glas|kasserolle)\b|\b(in|into)\s+an?\s+(?:\w+\s+)?(bowl|pan|pot|dish|skillet)\b/i.test(body);
+    // auch im Verb: „darübergießen“, „hineinschlagen“
+    const anaphor = /\b(darin|darauf|dazu|hinein|daran|darüber|obenauf|in it|on top|over it)\b/i.test(body) || /^(darüber|darauf|hinein|darunter)/.test(verb.key);
     const cur = currentDish(st, step);
     const prevOpen = st.prev && !st.consumed.has(st.prev.id) ? st.prev : null;
     const included = (s) => s && inputs.some((x) => x.ref === s.id);
@@ -874,20 +1083,24 @@
     else if (info.join === "und" && verb.cls !== "equip" && !rawIngredients.length && !inputs.some((x) => isStepRef(x.ref)) && prevOpen && !included(prevOpen)) chainTo = prevOpen; // „… abgießen und mit dem Öl schwenken“
     else if (info.join === "und" && verb.cls === "combine" && prevOpen && !included(prevOpen)) chainTo = prevOpen; // „… in eine Schüssel geben und mit dem Öl vermischen“
     else if (info.join === "und" && verb.cls === "heat" && prevOpen && !included(prevOpen) && mediumOnly(mentions, body)) chainTo = prevOpen; // „Zwiebel würfeln und in der Butter braten“
+    else if (alongOnly && verb.cls !== "equip" && info.join !== "new" && prevOpen && !included(prevOpen)) chainTo = prevOpen; // „Kartoffeln halbieren, mit Öl und Salz mischen“
     if (chainTo) inputs.unshift({ ref: chainTo.id, portion: "" });
     // „Beides in eine Auflaufform geben“: auch der vorige offene Strang
     if (chainTo && /\bbeides?\b/i.test(body)) {
       const other = model.steps.slice().reverse().find((s) => s !== chainTo && !st.consumed.has(s.id) && !included(s) && !equipmentLed(model, s));
       if (other) inputs.push({ ref: other.id, portion: "" });
     }
-    // „Mehl mit Backpulver mischen und unterheben“: der eben angerührte Nebenstrang kommt in die Hauptmasse
-    if (INTO.has(verb.key) && !mentions.length && chainTo && chainTo.srcStep === st.n) {
+    // „Mehl mit Backpulver mischen und unterheben“: der eben angerührte Nebenstrang kommt in die Hauptmasse,
+    // auch „… und abwechselnd mit der Milch unterrühren“ (nur Begleitzutaten mit „mit“)
+    if (INTO.has(verb.key) && (!mentions.length || alongOnly) && chainTo && chainTo.srcStep === st.n) {
       const main = mainMass(st, step, inputs, chainTo);
       if (main) inputs.unshift({ ref: main.id, portion: "" });
     }
-    // „den Teig“, „the batter“: die zuletzt angerührte Masse, wenn keiner der Eingänge sie enthält
-    if (MASS_WORD.test(body) && !inputs.some((x) => reachesCombine(model, x.ref))) {
-      const mix = model.steps.slice().reverse().find((s) => s !== step && !st.consumed.has(s.id) && verbClass(s) === "combine" && !inputs.some((x) => reaches(model, x.ref, s.id)));
+    // „den Teig“, „the batter“: die zuletzt angerührte Masse, wenn keiner der Eingänge sie enthält;
+    // „auf dem hellen Teig verteilen“: die Masse, die schon in der Form liegt
+    const onMass = /\b(?:auf|über)\s+(?:den|dem|die|das)\s+(?:[a-zäöüß]+\s+)?(?:teig|masse)\b/i.test(body);
+    if (MASS_WORD.test(body) && (onMass || !inputs.some((x) => reachesCombine(model, x.ref)))) {
+      const mix = model.steps.slice().reverse().find((s) => s !== step && !st.consumed.has(s.id) && (onMass ? reachesCombine(model, s.id) : verbClass(s) === "combine") && !inputs.some((x) => reaches(model, x.ref, s.id)));
       if (mix) inputs.push({ ref: mix.id, portion: "" });
     }
     // Anrichten führt alle offenen Stränge zusammen („Nudeln mit der Bolognese servieren“)

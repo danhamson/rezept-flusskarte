@@ -28,7 +28,7 @@
   def("add", "dazufügen,hinzugießen,unterkneten,einkneten,zufügen");
   def("prep", "herausnehmen,herausheben");
   def("heat", "zubereiten,einköcheln");
-  def("add", "bestäuben,aufstreichen,beträufeln,überstreuen,auflegen,darübergeben,dazugießen,einstreuen,nachwürzen,beifügen");
+  def("add", "bestäuben,aufstreichen,beträufeln,überstreuen,auflegen,darübergeben,dazugießen,einstreuen,nachwürzen,beifügen,darübergießen,darüberstreuen,darüberbröseln,darüberträufeln");
   def("heat", "wenden,anschwitzen,aufbacken,backen lassen,schmelzen lassen,erhitzen lassen,auslassen,einreduzieren,abflämmen,bräunen,rösten lassen");
 
   // Englisch; en: Verb steht vorn
@@ -137,10 +137,10 @@
     ["Dose", "dose", "dosen"], ["Pck.", "pck", "pck.", "päckchen", "packung", "pkg"], ["Becher", "becher"], ["Tasse", "tasse", "tassen"],
     ["Glas", "glas", "gläser"], ["Scheibe", "scheibe", "scheiben"], ["Zweig", "zweig", "zweige"], ["Handvoll", "handvoll"],
     ["Blatt", "blatt", "blätter"], ["Würfel", "würfel"], ["Kopf", "kopf", "köpfe"], ["Stange", "stange", "stangen"],
-    ["Schuss", "schuss"], ["Spritzer", "spritzer"],
+    ["Schuss", "schuss"], ["Spritzer", "spritzer"], ["Stiel", "stiel", "stiele"],
     ["cup", "cup", "cups", "c."], ["Tbs.", "tbs", "tbs.", "tbsp", "tbsp.", "tablespoon", "tablespoons"],
     ["tsp.", "tsp", "tsp.", "teaspoon", "teaspoons"], ["oz.", "oz", "oz.", "ounce", "ounces"], ["lb.", "lb", "lb.", "lbs", "lbs.", "pound", "pounds"],
-    ["clove", "clove", "cloves"], ["can", "can", "cans"], ["pinch", "pinch"], ["stick", "stick", "sticks"]
+    ["clove", "clove", "cloves"], ["can", "can", "cans", "tin", "tins"], ["pinch", "pinch"], ["stick", "stick", "sticks"], ["sprig", "sprig", "sprigs"]
   ];
   const UNIT_MAP = {};
   for (const [canon, ...alts] of UNITS) { UNIT_MAP[canon.toLowerCase()] = canon; for (const a of alts) UNIT_MAP[a.toLowerCase()] = canon; }
@@ -152,7 +152,9 @@
   const PIECE = ["flöckchen", "flocken", "röschen", "ringe", "ringen", "scheiben", "würfel", "würfeln", "streifen", "stücke", "stücken", "zehen", "zehe", "blätter", "blättchen", "spalten", "stifte", "hälften", "stange", "stangen", "mischung", "masse", "soße", "sauce", "creme", "teig"];
 
   // Gleichbedeutende Namen: „Karotte“ im Text findet „Möhre“ in der Zutatenliste
-  const SYNONYMS = [["möhre", "karotte", "mohrrübe"], ["frühlingszwiebel", "lauchzwiebel"], ["kartoffel", "erdapfel"]];
+  // „Nudeln“ im Text findet „Spaghetti“ oder „Tagliatelle“ in der Liste
+  const SYNONYMS = [["möhre", "karotte", "mohrrübe"], ["frühlingszwiebel", "lauchzwiebel"], ["kartoffel", "erdapfel"],
+    ["nudeln", "pasta", "spaghetti", "tagliatelle", "penne", "fusilli", "linguine", "farfalle", "makkaroni", "rigatoni"]];
 
   // Mengenwörter vor einer Zutat in Schritten
   const PORTION_WORDS = [

@@ -1,0 +1,25 @@
+# Shakshuka
+
+> Ein orientalisches Frühstück aus einer einzigen Pfanne.
+
+**Portionen:** 2 | **Zeit:** 25 Minuten
+
+## Zutaten
+
+- [ ] 1 Zwiebel
+- [ ] 1 rote Paprika
+- [ ] 2 Knoblauchzehen
+- [x] 1 EL Olivenöl
+- [ ] 400 g gehackte Tomaten (Dose)
+- [ ] 1 TL Kreuzkümmel
+- [ ] 4 Eier
+- [ ] Salz, Pfeffer
+- [ ] _optional:_ frische Petersilie
+
+## Zubereitung
+
+1. **Gemüse schneiden:** Zwiebel und Paprika würfeln, Knoblauch hacken.
+2. **Anbraten:** Öl in einer Pfanne erhitzen und das Gemüse darin 5 Minuten anbraten.
+3. **Köcheln:** Tomaten und Kreuzkümmel zugeben und 10 Minuten köcheln lassen. Mit Salz und Pfeffer würzen.
+4. **Eier garen:** Mit einem Löffel vier Mulden formen, die Eier hineinschlagen und zugedeckt 6–8 Minuten stocken lassen.
+5. Mit Petersilie bestreuen und servieren.

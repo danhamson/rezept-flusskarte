@@ -90,6 +90,7 @@ tools/check.mjs    Regressionstests für Parser, Layout und Zeitplan; mit Datei:
 tools/serve.mjs    statischer Vorschau-Server
 tools/icons.mjs    App-Icons erzeugen
 samples/           Beispielrezepte
+samples/seiten/    kopierte Rezeptseiten (Chefkoch, Cookidoo, HelloFresh, Blogs, Instagram, Markdown …) als Testfälle
 ```
 
 ## Veröffentlichen (GitHub Pages)
@@ -98,4 +99,4 @@ Die Seite ist statisch; GitHub Pages liefert den Branch `main` aus dem Wurzelver
 
 ## Grenzen des lokalen Parsers
 
-Der regelbasierte Parser erkennt Verben aus einer Liste: Infinitiv am Satzende, gebeugte du/er-Formen samt abgetrennter Partikel („dünstest … an“ → andünsten), englisch am Satzanfang. Von Rezeptseiten kopierter Text wird bereinigt: Kopfangaben (Zeiten, Portionen), Einleitung, Ankreuzkästchen vor Zutaten, Bildunterschriften zwischen den Absätzen und der Fuß ab „Nährwerte“ fallen weg, „TIPP:“-Absätze werden Fußnoten. Er verfolgt, in welchem Zwischenprodukt eine Zutat steckt, und setzt Handlungen ohne eigenes Material am aktuellen Gericht fort. Frei formulierte Rezepte, Pronomen ohne Bezug oder ungewöhnliche Verben brauchen „Mit KI umwandeln“ oder Nacharbeit im Struktur-Editor. Geschätzte Dauern im Zeitplan sind als solche markiert.
+Der regelbasierte Parser erkennt Verben aus einer Liste: Infinitiv am Satzende, gebeugte du/er-Formen samt abgetrennter Partikel („dünstest … an“ → andünsten), englisch am Satzanfang. Von Rezeptseiten kopierter Text wird bereinigt: Kopfangaben (Zeiten, Portionen), Einleitung, Ankreuzkästchen vor Zutaten, Bildunterschriften zwischen den Absätzen und der Fuß ab „Nährwerte“ fallen weg, „TIPP:“-Absätze werden Fußnoten. Welche Seitenformate er kennt (Menge und Name in eigenen Zeilen in beiden Reihenfolgen, Nährwerte vor der Zubereitung, Geräte- und Notizlisten, Schrittmarken wie „Schritt 1/3“, Zwischenüberschriften, Emojis, Markdown, Tabulatoren, Thermomix-Sekunden), steht in [samples/seiten/README.md](samples/seiten/README.md); jedes Format ist ein Testfall in `tools/check.mjs`. Er verfolgt, in welchem Zwischenprodukt eine Zutat steckt, und setzt Handlungen ohne eigenes Material am aktuellen Gericht fort. Frei formulierte Rezepte, Pronomen ohne Bezug oder ungewöhnliche Verben brauchen „Mit KI umwandeln“ oder Nacharbeit im Struktur-Editor. Geschätzte Dauern im Zeitplan sind als solche markiert.

@@ -16,6 +16,8 @@ for (const f of ["lexicon", "model", "parser", "layout", "schedule", "render", "
 const FK = globalThis.FK;
 const M = FK.model;
 const sample = (name) => fs.readFileSync(path.join(root, "samples", name), "utf8");
+// Kopierte Rezeptseiten (Aufbau wie die jeweilige Seite, Rezepttext selbst geschrieben); siehe samples/seiten/README.md
+const page = (name) => fs.readFileSync(path.join(root, "samples", "seiten", name), "utf8");
 
 // ---- Ausgabe eines Rezepts ------------------------------------------------------------------
 
@@ -76,7 +78,12 @@ function recipe(text) {
   const reaches = (s, ref) => upstream(s).has(ref);
   const portionOf = (s, ref) => ((s && s.inputs.find((x) => x.ref === ref)) || {}).portion;
   const lint = M.lint(m);
-  return { m, idx, ing, steps, step, upstream, reaches, portionOf, lint, plan: () => FK.schedule.plan(m) };
+  // Hilfen für die Seiten-Fälle: Zutaten als „Menge|Name|Zusatz“, Anzahl der Originalschritte, Warnungen
+  const ingList = () => m.ingredients.map((z) => [M.fmtAmount(z).replace(/\s/g, " "), z.name, z.note].filter(Boolean).join("|"));
+  const srcSteps = () => new Set(m.steps.map((s) => s.srcStep)).size;
+  const warnings = () => lint.filter((l) => l.level !== "info").map((l) => l.text);
+  const last = () => m.steps[m.steps.length - 1];
+  return { m, idx, ing, steps, step, upstream, reaches, portionOf, lint, ingList, srcSteps, warnings, last, plan: () => FK.schedule.plan(m) };
 }
 
 const CASES = [
@@ -361,6 +368,9 @@ const CASES = [
       t.eq(r.m.servings, 4, "Portionen");
       t.eq(r.m.ingredients.map((z) => z.name), ["Gemüsebrühepulver", "Kartoffeln", "Brokkoli", "Zwiebel", "Margarine", "Mehl", "Kochwasser", "Sahne", "Muskat", "Salz", "Pfeffer", "Käse"], "Zutaten");
       t.eq(M.fmtAmount(r.ing("Brokkoli")).replace(/\s/g, " "), "2 Köpfe", "Menge aus der Zeile davor");
+      t.eq([M.fmtAmount(r.ing("Kartoffeln")), r.ing("Kartoffeln").note], ["6", "mittelgroße"], "„6 m.-große“ / „Kartoffel(n)“");
+      t.eq(M.fmtAmount(r.ing("Kochwasser")).replace(/\s/g, " "), "½ Liter", "„0.5 Liter“");
+      t.eq(M.fmtAmount(r.ing("Käse")), "viel", "Mengenwort „viel“");
       t.eq(M.fmtAmount(r.ing("Muskat")), "etwas", "Mengenwort");
       t.ok(r.ing("Gemüsebrühepulver").optional, "„n. B.“ ist nach Belieben");
       t.eq(r.ing("Sahne").note, "oder Sojasahne, ca. 200 ml", "Zusatzzeile als Notiz");
@@ -378,6 +388,233 @@ const CASES = [
       t.eq([last.verb, last.temp, M.durText(last.dur), last.passive], ["backen", "180 °C", "20–25 min", true], "In den Ofen stellen ist Backen");
       t.ok(r.reaches(last, form.id) && r.reaches(last, sauce.id), "Soße und Gemüse kommen zusammen in den Ofen");
       t.eq(r.lint.filter((l) => l.level !== "info").map((l) => l.text), [], "keine Warnungen");
+    }
+  },
+
+  // ---- Kopierte Rezeptseiten (samples/seiten) ----------------------------------------------------
+  {
+    name: "Seite: WordPress-Blog (WP Recipe Maker), du-Form, Bildunterschriften",
+    text: page("wordpress-wprm.txt"),
+    check(r, t) {
+      t.eq([r.m.title, r.m.servings], ["Ragù alla Bolognese wie bei Nonna", 4], "Titel und Portionen ohne Einleitung");
+      t.eq(r.m.statedTime, "Vorbereitung 20 Min., Zubereitung 1 Std. 10 Min., gesamt 1 Std. 30 Min.", "„20Minuten Min.“ in der Zeile unter der Bezeichnung");
+      t.eq(r.m.ingredients.length, 15, "Zutaten ohne Ankreuzkästchen, „Salz und Pfeffer“ getrennt");
+      t.eq(r.ing("Rinderhackfleisch").note, "grob gewolft", "Zusatz hinter dem Hauptwort");
+      t.eq(r.srcSteps(), 11, "Bildunterschriften sind keine Schritte");
+      t.ok(!r.m.steps.some((s) => /Soffritto im Topf|Ragù im Topf|für das Ragù würfeln|Kommentar/.test(s.src)), "keine Bildunterschrift und nichts nach „Nährwerte“");
+      const fry = r.step("andünsten");
+      t.ok(fry && M.durText(fry.dur) === "2 min" && r.reaches(fry, r.ing("Pancetta oder durchwachsener Speck").id), "„dünstest darin die Pancetta-Würfel 2 Minuten an“");
+      t.ok(/nicht zu heiß/.test(r.step("garen") && r.step("garen").note), "TIPP-Absatz wird Hinweis");
+      t.eq(r.step("dünsten") && r.step("dünsten").note, "Ab und zu umrühren", "Nebenbei-Anweisung wird Hinweis");
+      t.ok(r.last().verb === "servieren" && r.reaches(r.last(), r.ing("Tagliatelle").id) && r.reaches(r.last(), r.ing("Rinderhackfleisch").id), "„Die Nudeln mit dem Ragù servieren“ findet die Tagliatelle");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: Weight Watchers (Name vor der Menge, Angaben mit •)",
+    text: page("weightwatchers.txt"),
+    check(r, t) {
+      t.eq(r.m.servings, 2, "„Portionen: 2“ zwischen den Zeitangaben");
+      t.eq(r.m.statedTime, "gesamt 30 Min., Vorbereitung 10 Min., Zubereitung 20 Min.", "Angaben einer Zeile mit • getrennt");
+      t.eq(r.ingList(), ["1 Stück|Zwiebel|mittelgross", "1 Zehe|Knoblauch", "1 TL|Öl|Olivenöl", "200 g|Karotten", "400 g|Tomaten|gehackt, Konserve", "300 ml|Gemüsebouillon|zubereitet, 1 TL Instantpulver", "120 g|Teigwaren|Vollkornteigwaren, trocken, Penne", "1 Prise|Salz|Jodsalz"], "Name, dann „Menge, Zusatz“");
+      t.eq(r.srcSteps(), 3, "Schrittnummern auf eigener Zeile");
+      const simmer = r.step("köcheln lassen");
+      t.ok(simmer && M.durText(simmer.dur) === "12 min" && r.reaches(simmer, r.ing("Teigwaren").id) && r.reaches(simmer, r.ing("Knoblauch").id), "alles köchelt in einem Topf");
+      t.ok(!r.m.steps.some((s) => /Frittata/.test(s.src + s.note)), "„Das gefällt anderen auch“ beendet das Rezept");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: Cookidoo/Thermomix (Name, Zusatz, Menge, Einheit je Zeile; „5 Sek./Stufe 5“)",
+    text: page("cookidoo.txt"),
+    check(r, t) {
+      t.eq(r.m.servings, 4, "„4 Portionen“ allein");
+      t.eq(r.m.statedTime, "Zubereitung 15 Min., gesamt 35 Min.", "„Zubereitung 15 Min“ ist eine Zeitangabe, keine Überschrift");
+      t.eq(r.ingList(), ["1|Zwiebel|halbiert", "1 Zehe|Knoblauch", "20 g|Olivenöl", "200 g|Möhren|in Stücken", "150 g|rote Linsen", "900 g|Wasser", "1 EL|Gemüsebrühe-Paste", "1 TL|Salz"], "Zeilen zu Zutaten zusammengesetzt");
+      t.eq(r.steps("zerkleinern").map((s) => M.durText(s.dur)), ["5 s", "4 s"], "Sekunden");
+      const cook = r.step("garen");
+      t.eq(cook && [cook.temp, M.durText(cook.dur)], ["100 °C", "20 min"], "„20 Min./100°C/Linkslauf/Stufe 1“");
+      t.ok(!r.m.steps.some((s) => /einfach|Schwierigkeit/.test(s.note)), "„Schwierigkeitsgrad“ / „einfach“ nach den Schritten ist kein Hinweis");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: lecker.de (Bewertung, Portionswähler, Nummer direkt am Text)",
+    text: page("lecker.txt"),
+    check(r, t) {
+      t.eq([r.m.title, r.m.statedTime], ["Bunte Gemüse-Spaghetti", "Zubereitung 30 Min."], "Titel und Zeit; „Rezept bewerten“ beendet nichts");
+      t.eq(r.m.ingredients.length, 13, "„4,4/5 (47)“ ist keine Zutat");
+      t.eq(r.m.ingredients[0].name, "Aubergine", "erste Zutat");
+      t.eq(r.srcSteps(), 3, "„1Aubergine, …“ beginnt Schritt 1");
+      const fry = r.step("andünsten");
+      t.ok(fry && r.reaches(fry, r.ing("Aubergine").id) && r.reaches(fry, r.ing("Zwiebel").id) && !r.reaches(fry, r.ing("Gemüsebrühe").id), "„Gemüse darin andünsten“: das geschnittene Gemüse, nicht die Gemüsebrühe");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: EAT SMARTER (Nährwerte vor den Zutaten, „für / 4 / Portionen“)",
+    text: page("eatsmarter.txt"),
+    check(r, t) {
+      t.eq(r.m.servings, 4, "Portionen über drei Zeilen");
+      t.eq(r.ingList(), ["400 g|Möhren", "2|Pastinaken", "1|rote Zwiebel", "4 EL|Rapsöl", "2 TL|Honig", "Salz", "Pfeffer", "200 g|Buchweizen", "2 EL|Apfelessig", "4 Stiele|Petersilie"], "nur die Zutaten, ohne Nährwerte und Linkliste");
+      t.eq(r.srcSteps(), 4, "„Zubereitungsschritte“ mit „1.“ auf eigener Zeile");
+      const roast = r.step("rösten");
+      t.ok(roast && r.reaches(roast, r.ing("Pastinaken").id) && r.reaches(roast, r.ing("rote Zwiebel").id), "„Gemüse mit Öl und Honig mischen“ nimmt das geschnittene Gemüse");
+      t.eq(r.last().verb, "servieren", "nichts aus „Ähnliche Rezepte“");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: HelloFresh (Nährwerte vor der Zubereitung, Kochutensilien, Mengen für andere Größen)",
+    text: page("hellofresh.txt"),
+    check(r, t) {
+      t.eq([r.m.servings, r.m.statedTime], [2, "gesamt 35 Min."], "„Portionsgröße2“, „Gesamtzeit:“ / „35 Minuten“");
+      t.eq(r.m.ingredients.map((z) => z.name), ["Kartoffeln", "Seelachs", "Salatgurke", "Zitrone", "Dill", "Semmelbrösel", "Naturjoghurt", "Öl", "Salz", "Butter"], "ohne Allergene, Utensilien und Kalorien");
+      t.eq(r.srcSteps(), 5, "mehrere Zeilen je Schrittnummer bleiben ein Schritt");
+      const mix = r.step("mischen"), bake = r.step("backen");
+      t.eq(r.portionOf(mix, r.ing("Öl").id), "1 EL", "„1 EL [1,5 EL I 2 EL] Öl*“: die Menge für 2 Portionen");
+      t.ok(bake && M.durText(bake.dur) === "20–25 min" && r.reaches(bake, r.ing("Kartoffeln").id), "„Kartoffeln halbieren, mit … mischen“: die Kartoffeln kommen aufs Blech");
+      t.ok(!r.reaches(r.step("vermengen"), r.ing("Kartoffeln").id), "frisches Salz holt nicht die Ofenkartoffeln in die Fischmasse");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: Kitchen Stories („Zubereitung“ / „10 Min.“, „Schritt 1/3“, Utensilien)",
+    text: page("kitchenstories.txt"),
+    check(r, t) {
+      t.eq([r.m.servings, r.m.statedTime], [2, "Zubereitung 10 Min., Backen 15 Min."], "„2“ / „Portionen“, Zeiten mit Wert in der nächsten Zeile");
+      t.eq(r.m.ingredients.map((z) => z.name), ["Eier", "Babyspinat", "Zwiebel", "Milch", "Feta", "Olivenöl", "Salz", "Pfeffer"], "Utensilien sind keine Zutaten");
+      t.eq(r.srcSteps(), 3, "„Schritt 1/3“ … „Schritt 3/3“");
+      const set = r.step("stocken");
+      t.ok(set && r.reaches(set, r.ing("Eier").id) && r.reaches(set, r.ing("Babyspinat").id) && r.reaches(set, r.step("vorheizen").id), "„Eier darübergießen“ setzt die Pfanne fort");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: Dr. Oetker (Gruppen mit Doppelpunkt, Zwischenüberschriften, Ofenstufen)",
+    text: page("dr-oetker.txt"),
+    check(r, t) {
+      t.eq(r.m.ingredients.map((z) => z.name), ["Fett", "weiche Butter", "Zucker", "Vanillezucker", "Eier", "Weizenmehl", "Backpulver", "Milch", "Kakaopulver", "Sahne", "Puderzucker"], "„Rührteig:“, „Zum Bestäuben:“ sind keine Zutaten");
+      t.eq(r.srcSteps(), 4, "vier Zwischenüberschriften, vier Schritte");
+      t.ok(!r.m.steps.some((s) => /^(zubereiten|marmorieren|vorbereiten)$/.test(s.verb)), "Überschriften sind keine Handlungen");
+      const pre = r.step("vorheizen");
+      t.eq(pre && [pre.temp, pre.detail, pre.note], ["180 °C", "Ober-/Unterhitze", "Heißluft: etwa 160 °C"], "Ofenstufen unter „Backofen vorheizen.“");
+      t.eq(r.steps("backen").map((s) => M.durText(s.dur)), ["55 min"], "„in den Backofen schieben und 55 Minuten backen“ ist ein Schritt");
+      t.ok(r.reaches(r.step("backen"), r.ing("Fett").id) && r.reaches(r.step("backen"), r.ing("Kakaopulver").id), "gefettete Form und dunkler Teig landen im Ofen");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: Instagram (Emojis, 1️⃣, Hashtags)",
+    text: page("instagram.txt"),
+    check(r, t) {
+      t.eq([r.m.title, r.m.servings], ["Cremige One-Pot-Pasta", 2], "Titel ohne Emojis");
+      t.eq(r.m.ingredients.map((z) => z.name), ["Spaghetti", "Zwiebel", "Knoblauch", "Gemüsebrühe", "Sahne", "Parmesan", "Salz", "Pfeffer"], "„🛒 Zutaten:“ und „▫️“-Aufzählung");
+      t.eq(r.srcSteps(), 4, "„1️⃣ …“ sind nummerierte Schritte");
+      const chop = r.step("hacken");
+      t.eq(chop && r.m.source.slice(chop.srcRange[0], chop.srcRange[1]), chop && chop.src, "Textstelle passt trotz Emojis zur Quelle");
+      t.ok(r.step("geben") && r.step("geben").inputs.some((x) => x.ref === chop.id), "Gehacktes kommt in den Topf");
+      t.ok(!r.m.steps.some((s) => /Rezept|#/.test(s.note + s.src)), "„Speichere dir das Rezept!“ und Hashtags fallen weg");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: Markdown (Aufgabenliste, Fettdruck, Zitat)",
+    text: page("markdown.txt"),
+    check(r, t) {
+      t.eq([r.m.title, r.m.servings, r.m.statedTime], ["Shakshuka", 2, "Zeit 25 Min."], "„**Portionen:** 2 | **Zeit:** 25 Minuten“");
+      t.eq(r.m.ingredients.length, 10, "Zutaten aus „- [ ]“ und „- [x]“");
+      t.ok(r.ing("frische Petersilie") && r.ing("frische Petersilie").optional, "„_optional:_“");
+      t.eq(r.srcSteps(), 5, "fünf Schritte");
+      t.ok(!r.m.steps.some((s) => s.verb === "schneiden"), "„**Gemüse schneiden:**“ ist ein Zwischentitel");
+      const set = r.step("stocken");
+      t.ok(set && r.reaches(set, r.ing("Eier").id) && r.reaches(set, r.ing("gehackte Tomaten").id) && r.reaches(set, r.ing("Zwiebel").id), "Eier stocken in der Soße mit dem Gemüse");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: Tabelle mit Tabulatoren, Angaben mit „ / “",
+    text: page("tabelle.txt"),
+    check(r, t) {
+      t.eq([r.m.servings, r.m.statedTime], [4, "Arbeitszeit 20 Min., Kochen/Backen 25 Min."], "„Arbeitszeit: ca. 20 Min. / Koch-/Backzeit: …“");
+      t.eq(r.ingList(), ["750 g|Kartoffeln|mehligkochende", "1|Zwiebel", "1 Stange|Lauch", "1 l|Gemüsebrühe", "100 ml|Sahne", "Salz", "Pfeffer", "Muskat"], "Menge und Name durch Tabulator getrennt");
+      t.eq(r.srcSteps(), 3, "die Kopfzeile unter „Zubereitung“ ist kein Schritt");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: BBC Good Food (englisch, Reiter „Nutrition“, „step 1“)",
+    text: page("bbc-goodfood.txt"),
+    check(r, t) {
+      t.eq([r.m.servings, r.m.statedTime], [4, "prep 15 Min., cook 1 Std. 5 Min."], "„Prep: 15 mins“, „Cook: 1 hr and 5 mins“, „Serves 4“");
+      t.eq(r.ingList(), ["1 tbsp|olive oil", "1|onion|finely chopped", "2 cloves|garlic|crushed", "1|red pepper|deseeded and chopped", "1 tsp|ground cumin", "2 tins|chopped tomatoes|400g", "1 tin|kidney beans|drained, 400g", "150 g|rice"], "Zutaten trotz Reiter, Einheitenwahl und Gruppen");
+      t.eq(r.srcSteps(), 4, "„step 1“ … „step 4“");
+      const simmer = r.step("simmer");
+      t.ok(simmer && r.reaches(simmer, r.ing("kidney beans").id) && r.reaches(simmer, r.ing("onion").id), "„Add the tomatoes and beans, then simmer“");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: Tasty Recipes (englisch, Units/Scale, Notes, „Method: Oven“)",
+    text: page("tasty-recipes.txt"),
+    check(r, t) {
+      t.eq([r.m.servings, r.m.statedTime], [4, "total 45 Min., prep 10 Min., cook 35 Min."], "„Yield: 4 servings 1x“, Zeiten auch nach den Notes");
+      t.eq(r.m.ingredients.map((z) => z.name), ["baby potatoes", "olive oil", "garlic", "salt", "black pepper", "lemon"], "ohne Units, Scale, 1x, Cook Mode");
+      t.eq(r.srcSteps(), 4, "„Method: Oven“ ist keine Überschrift");
+      t.eq(r.step("preheat") && r.step("preheat").temp, "425 °F", "Fahrenheit");
+      t.eq(r.last().note, "Leftovers keep for 3 days in the fridge", "Notes werden Hinweis zum Gericht, Category/Cuisine nicht");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: Allrecipes (englisch, Wert unter der Bezeichnung, „Step 1“, Fotonachweis)",
+    text: page("allrecipes.txt"),
+    check(r, t) {
+      t.eq([r.m.servings, r.m.statedTime], [8, "prep 10 Min., cook 15 Min., total 25 Min."], "„Servings:“ / „8“");
+      t.eq(r.m.ingredients.length, 7, "ohne „1/2x“ … „Original recipe yields“");
+      t.eq(r.srcSteps(), 3, "„Step 1“ … „Step 3“");
+      t.ok(!r.m.steps.some((s) => /Photographer|Made It/.test(s.src + s.note)), "Fotonachweis und Knöpfe fallen weg");
+      t.ok(r.reaches(r.last(), r.ing("milk").id) && r.reaches(r.last(), r.ing("all-purpose flour").id), "Teig kommt auf die Platte");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seite: Serious Eats (Aufzählung vor den Zutaten, Special Equipment, Notes)",
+    text: page("serious-eats.txt"),
+    check(r, t) {
+      t.eq([r.m.servings, r.m.statedTime], [6, "prep 15 Min., cook 60 Min., total 75 Min."], "„Prep 15 mins“ ohne Doppelpunkt");
+      t.eq(r.m.ingredients.map((z) => z.name), ["potatoes", "salt", "olive oil", "rosemary"], "„Why It Works“ ist keine Zutatenliste");
+      t.eq(r.srcSteps(), 4, "vier Schritte, Fotonachweis dazwischen");
+      t.ok(/a day ahead/.test(r.last().note) && !/baking sheet/.test(r.last().note), "Notes ja, Geräteliste nein");
+      t.eq(r.warnings(), [], "keine Warnungen");
+    }
+  },
+  {
+    name: "Seiten: Aufzählung vor „Für die Soße:“ bleibt Zutatenliste",
+    text: "Pfannkuchen (2 Portionen)\n- 200 g Mehl\n- 2 Eier\nFür die Soße:\n- 100 ml Sahne\nZubereitung\n1. Mehl und Eier verrühren.\n2. Sahne aufkochen.",
+    check(r, t) {
+      t.eq(r.m.ingredients.map((z) => z.name), ["Mehl", "Eier", "Sahne"], "alle drei Zutaten");
+    }
+  },
+  {
+    name: "Seiten: Zutatenzeilen, Sekunden, Namen mit Alternative",
+    text: "",
+    check(r, t) {
+      const z = (line) => { const x = FK.parser.parseIngredientLine(line)[0]; return [M.fmtAmount(x).replace(/\s/g, " "), x.name, x.note, x.optional]; };
+      t.eq(z("- [ ] 400 g gehackte Tomaten (Dose)"), ["400 g", "gehackte Tomaten", "Dose", false], "Markdown-Aufgabe");
+      t.eq(z("1 EL [1,5 EL I 2 EL] Öl*"), ["1 EL", "Öl", "", false], "HelloFresh: Mengen für andere Größen, Vorrats-Sternchen");
+      t.eq(z("10 g [15 g | 20 g] Butter"), ["10 g", "Butter", "", false], "Mengen mit senkrechtem Strich");
+      t.eq(z("20 g Parmesan (7)"), ["20 g", "Parmesan", "", false], "Allergen-Nummer");
+      t.eq(z("_optional:_ frische Petersilie"), ["", "frische Petersilie", "", true], "Markdown-Hervorhebung");
+      t.eq(z("1 Prise(n) Salz/Jodsalz"), ["1 Prise", "Salz", "Jodsalz", false], "„Prise(n)“, Alternative mit Schrägstrich");
+      t.eq(z("4 Stiele Petersilie"), ["4 Stiele", "Petersilie", "", false], "Einheit „Stiele“");
+      t.eq(z("2 x 400g tins chopped tomatoes"), ["2 tins", "chopped tomatoes", "400g", false], "„2 x 400g tins“");
+      t.eq(z("2 garlic cloves crushed"), ["2 cloves", "garlic", "crushed", false], "englisch: Einheit und Zubereitung hinter dem Namen");
+      t.eq(M.durText(FK.parser.durationIn("5 Sek./Stufe 5 zerkleinern")), "5 s", "Thermomix-Sekunden");
+      t.eq(M.normDur(M.durText({ min: 0.5, max: 0.5 })), { min: 0.5, max: 0.5 }, "„30 s“ hin und zurück");
+      t.ok(["pancetta", "speck"].every((k) => M.keysFor("Pancetta oder durchwachsener Speck").includes(k)), "„A oder B“: beide Namen");
+      t.ok(!M.tokenMatchesKey("gemüse", "gemüsebrühe") && M.tokenMatchesKey("salat", "salatherz"), "„Gemüse“ ist Oberbegriff, „Salat“ bleibt Kurzform");
+      t.ok(M.keysFor("Tagliatelle").includes("nudel"), "„Nudeln“ findet Tagliatelle");
     }
   },
 ];
