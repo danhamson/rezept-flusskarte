@@ -59,8 +59,7 @@
     if (/[dt]$|[^aeiouäöülrhmn][mn]$/.test(stem)) { du = stem + "est"; er = stem + "et"; }
     else if (/[sßzx]$/.test(stem)) { du = stem + "t"; er = du; }
     else { du = stem + "st"; er = stem + "t"; }
-    // er-Form von untrennbaren und -ieren-Verben gleicht dem Partizip („verrührt“, „püriert“)
-    return /^(be|ver|zer|er|ent|emp|ge|miss|über)/.test(inf) || /ieren$/.test(inf) ? [du] : [du, er];
+    return [du, er];
   }
   const FINITE = {};
   for (const inf of Object.keys(V)) {
@@ -93,7 +92,10 @@
     servieren: "serviert", anrichten: "angerichtet", aufkochen: "aufgekocht", köcheln: "geköchelt", schmoren: "geschmort",
     garen: "gegart", dämpfen: "gedämpft", reduzieren: "reduziert", glasieren: "glasiert", füllen: "gefüllt", bestreichen: "bestrichen",
     zugeben: "zugegeben", hinzufügen: "hinzugefügt", einrühren: "eingerührt", kühlen: "gekühlt", überbacken: "überbacken",
-    gratinieren: "gratiniert", frittieren: "frittiert", grillen: "gegrillt", wenden: "gewendet", rühren: "gerührt"
+    gratinieren: "gratiniert", frittieren: "frittiert", grillen: "gegrillt", wenden: "gewendet", rühren: "gerührt",
+    geben: "gegeben", dazugeben: "dazugegeben", hinzugeben: "hinzugegeben", dazufügen: "dazugefügt", hinzugießen: "hinzugegossen",
+    entfernen: "entfernt", abwiegen: "abgewogen", zerkrümeln: "zerkrümelt", ablöschen: "abgelöscht", umrühren: "umgerührt",
+    abschmecken: "abgeschmeckt", zubereiten: "zubereitet", einköcheln: "eingeköchelt"
   };
 
   // Geräte. node: wird zur eigenen Zeile, wenn es vorbereitet werden muss
@@ -147,7 +149,7 @@
 
   // Schätzwerte (Minuten) für Schritte ohne Zeitangabe
   const ESTIMATE = {
-    verb: { schälen: 5, hobeln: 4, schneiden: 3, hacken: 2, würfeln: 4, reiben: 3, schichten: 6, einschichten: 6, verrühren: 2, vorheizen: 15, ausstreichen: 1, abreiben: 1, verteilen: 1, abschließen: 1, servieren: 1, anrichten: 2, kneten: 5, preheat: 15 },
+    verb: { schälen: 5, hobeln: 4, schneiden: 3, hacken: 2, würfeln: 4, reiben: 3, schichten: 6, einschichten: 6, verrühren: 2, vorheizen: 15, ausstreichen: 1, abreiben: 1, verteilen: 1, abschließen: 1, servieren: 1, anrichten: 2, kneten: 5, preheat: 15, erhitzen: 2, entfernen: 1, waschen: 1, abwiegen: 1, zerkrümeln: 2 },
     cls: { prep: 3, combine: 2, add: 1, heat: 10, rest: 10, equip: 1, finish: 2, other: 2 }
   };
 
