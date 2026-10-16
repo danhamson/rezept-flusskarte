@@ -144,7 +144,7 @@
         <details class="peek"><summary>Prompt ansehen</summary><textarea id="ai-prompt" class="code" readonly rows="8" aria-label="Prompt"></textarea></details>
       </li>
       <li>
-        <b>Antwort einfügen:</b> die komplette Antwort der KI, Codeblock und Begleittext dürfen dabei sein.
+        <b>Antwort einfügen:</b> die komplette Antwort der KI, Codeblock und Begleittext dürfen dabei sein. Die KI schreibt das Rezept auch einheitlich neu (Titel, Zutatenliste, nummerierte Schritte); dieser Text ersetzt das Rezeptfeld, „Rückgängig“ holt das Original zurück.
         <textarea id="ai-answer" class="code" rows="6" placeholder="```json&#10;{ &quot;format&quot;: &quot;flusskarte/1&quot;, … }&#10;```" aria-label="Antwort der KI"></textarea>
         <div class="row"><button type="button" id="ai-apply" class="btn primary">Karte übernehmen</button></div>
         <p id="ai-err" class="json-err" role="alert"></p>

@@ -12,7 +12,7 @@ Web-Editor, der ein normal geschriebenes Rezept in eine tabellarische **Flusskar
 
 | Funktion | Wo | Wie |
 |---|---|---|
-| Mit KI umwandeln | Knopf unter dem Rezepttext | Die App ruft keine KI auf. Sie kopiert einen Prompt, der jede Chat-KI (ChatGPT, Gemini, Claude …) das Format `flusskarte/1` lehrt, wahlweise mit dem aktuellen Rezept oder als dauerhafte Formatanleitung. Die Antwort der KI wird eingefügt; Codeblöcke, Begleittext und überzählige Kommas stören nicht. |
+| Mit KI umwandeln | Knopf unter dem Rezepttext | Die App ruft keine KI auf. Sie kopiert einen Prompt, der jede Chat-KI (ChatGPT, Gemini, Claude …) das Format `flusskarte/1` lehrt, wahlweise mit dem aktuellen Rezept oder als dauerhafte Formatanleitung. Die KI schreibt das Rezept dabei zusätzlich in einer Standardform neu (`source`: Titel mit Portionen, „Zutaten“ als `*`-Liste, „Zubereitung“ als nummerierte Schritte im Infinitiv, „Tipp:“-Zeilen; Inhalt unverändert, Einleitung und Nährwerte entfallen). Dieser Text ersetzt das Rezeptfeld, die Zitate der Schritte verweisen darauf, und auch „Umwandeln“ liest ihn gut. Die Antwort der KI wird eingefügt; Codeblöcke, Begleittext und überzählige Kommas stören nicht. |
 | Teilen | Kopfzeile | Das Rezept als eine Zeile `FK1.…` (deflate-komprimiertes JSON, base64url), wahlweise mit Originaltext. Der Code lässt sich ins Rezeptfeld oder in „Code laden“ einfügen; online gibt es zusätzlich einen Link `…/#fk=FK1.…`. Umbrochene Codes aus Messengern werden wieder zusammengesetzt. |
 | PDF | Kopfzeile | Eigene Druckseite (A4 quer oder hoch) mit Karte, Anmerkungen, Schichtplan, Zeitplan, Prüfung, Original. Die Karte wird auf Seitenbreite oder eine ganze Seite eingepasst; Schwarz-Weiß möglich. Ausgabe über den Druckdialog („Als PDF speichern“), daher scharfer, durchsuchbarer Text. |
 | Darstellung | Kopfzeile, Symbol ◐ | Hell, Dunkel oder automatisch; 11 Farbschemata oder eigene Farben für Linien, Akzent und Hintergrund. Kontraste werden automatisch nachgeregelt. |
@@ -63,7 +63,7 @@ Im Beispiel (Kartoffelgratin) findet die Prüfung, dass die Butter nur „für d
 }
 ```
 
-`inputs[].ref` zeigt auf eine Zutat, ein Gerät oder einen früheren Schritt. Ein Schritt ohne Verbraucher ist das fertige Gericht.
+`inputs[].ref` zeigt auf eine Zutat, ein Gerät oder einen früheren Schritt. Ein Schritt ohne Verbraucher ist das fertige Gericht. Das optionale Feld `source` enthält den Rezepttext (von der KI in Standardform); `src` ist ein wörtliches Zitat daraus.
 
 ## Aufbau
 

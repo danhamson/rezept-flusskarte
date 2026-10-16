@@ -630,13 +630,15 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
       const raw = FK.ai.extract($("#ai-answer").value);
       const m = M.normalize(raw);
       if (!m.steps.length) throw new Error("Die Antwort enthält keine Arbeitsschritte.");
-      const src = typeof raw.source === "string" && raw.source ? raw.source : S.text;
+      // Rezepttext in Standardform aus der Antwort ersetzt das Eingabefeld
+      const fresh = !!m.source;
+      const src = m.source || S.text;
       FK.ai.attachSource(m, src);
       err.textContent = "";
       $("#ai-answer").value = "";
       closeDlg($("#dlg-ai"));
       setLeft("text");
-      adopt(m, "ai", src, "Karte aus der KI-Antwort übernommen");
+      adopt(m, "ai", src, fresh ? "Karte und Rezepttext aus der KI-Antwort übernommen" : "Karte aus der KI-Antwort übernommen");
     } catch (e) {
       err.textContent = e && e.message ? e.message : "Die Antwort konnte nicht gelesen werden.";
     }
