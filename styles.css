@@ -488,7 +488,7 @@ table.fk td.done-row { background: var(--panel-2); color: var(--muted); font-siz
 table.fk td.done-row .chk { color: var(--accent); font-weight: 700; }
 table.fk td.op.next, table.fk td.amt.next, .tl-row.next { background: var(--next-bg); box-shadow: inset 0 0 0 2px var(--accent); }
 table.fk td.op.next .op-chk { border-color: var(--accent); }
-table.fk td.amt.next { font-weight: 700; }
+table.fk td.amt.next { font-weight: 700; color: var(--ink); }
 .tl-row[role="checkbox"] { cursor: pointer; border-radius: 3px; }
 .tl-row[role="checkbox"]:hover { background: var(--panel-2); }
 .tl-label:has(.tl-txt) { display: flex; align-items: center; gap: 4px; }

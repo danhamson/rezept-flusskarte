@@ -217,7 +217,8 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
       '<button type="button" class="btn ghost sm" data-cook="reset">Zurücksetzen</button></div>';
   }
 
-  // Nächster offener Schritt (kleinste Nummer) und seine Mengenzellen hervorheben
+  // Nächster offener Schritt (kleinste Nummer) hervorheben, dazu die Mengen aller Zeilen,
+  // die in ihn einfließen – auch über frühere Schritte (Kartoffeln → schälen → hobeln)
   function markNext() {
     const v = $("#view");
     $$(".next", v).forEach((el) => el.classList.remove("next"));
@@ -225,8 +226,12 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     if (!m || (S.view !== "flow" && S.view !== "timeline")) return;
     const done = new Set(S.done), s = m.steps.find((x) => !done.has(x.id));
     if (!s) return;
+    const byId = new Map(m.steps.map((x) => [x.id, x])), up = new Set();
+    const walk = (x) => { if (up.has(x.id)) return; up.add(x.id); for (const inp of x.inputs) { const p = byId.get(inp.ref); if (p) walk(p); } };
+    walk(s);
     const q = window.CSS && CSS.escape ? CSS.escape(s.id) : s.id;
-    $$('[data-step="' + q + '"][role="checkbox"], td.amt[data-for="' + q + '"]', v).forEach((el) => el.classList.add("next"));
+    $$('[data-step="' + q + '"][role="checkbox"]', v).forEach((el) => el.classList.add("next"));
+    $$("td.amt[data-for]", v).forEach((el) => { if (up.has(el.dataset.for)) el.classList.add("next"); });
   }
 
   // Haken an Ort und Stelle setzen: kein Neuaufbau, damit ein Doppelklick dasselbe Feld trifft.
