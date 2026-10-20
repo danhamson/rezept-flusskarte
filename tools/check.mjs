@@ -647,6 +647,28 @@ const CASES = [
     }
   },
   {
+    name: "Menge-Spalte: Rest und Anteile als feste Menge",
+    text: sample("kartoffelgratin.txt"),
+    check(r, t) {
+      const amt = (m, opts) => [...FK.render.flowCard(m, opts || {}).html.matchAll(/<td class="amt[^"]*"[^>]*>(.*?)<\/td>/g)].map((x) => x[1].replace(/<span class="pw">/g, " [").replace(/<[^>]+>/g, ""));
+      const g = amt(r.m);
+      t.ok(g.includes("1–2 Zehen [Rest"), "Rest des Knoblauchs: " + g.join(" | "));
+      t.ok(g.includes("n. B."), "Pfeffer ohne Menge");
+      t.ok(amt(r.m, { servings: 8 }).includes("2–4 Zehen [Rest"), "Rest wächst mit den Portionen");
+      const m = M.normalize({
+        title: "Auflauf", servings: 2,
+        ingredients: [{ id: "z1", qty: 800, unit: "g", name: "Kartoffeln" }, { id: "z2", qty: 200, unit: "g", name: "Käse" }],
+        steps: [
+          { id: "s1", verb: "schneiden", inputs: [{ ref: "z1" }], product: "Kartoffelscheiben" },
+          { id: "s2", verb: "legen", inputs: [{ ref: "s1", portion: "½" }, { ref: "z2" }] },
+          { id: "s3", verb: "darauflegen", inputs: [{ ref: "s2" }, { ref: "s1", portion: "Rest" }] }
+        ]
+      });
+      const k = amt(m);
+      t.ok(k.includes("≈ 400 g Kartoffelscheiben [Rest"), "Rest des Zwischenprodukts: " + k.join(" | "));
+    }
+  },
+  {
     name: "Seiten: Zutatenzeilen, Sekunden, Namen mit Alternative",
     text: "",
     check(r, t) {

@@ -105,6 +105,102 @@
     return fmtQty(q, factor, canon) + (unit ? " " + unit : "") + rest;
   }
 
+  // ---- Mengen je Verwendung -----------------------------------------------------------------
+  // Aus „Rest“, „½“ oder „1 Zehe“ wird eine feste Menge: Anteile beziehen sich auf die Gesamtmenge
+  // der Zutat, ein Rest ist, was die übrigen Verwendungen übrig lassen. Zwischenprodukte wiegen
+  // ungefähr so viel wie die gewogenen Zutaten davor (ml ≈ g).
+
+  const MASS = { mg: 0.001, g: 1, kg: 1000, ml: 1, cl: 10, dl: 100, l: 1000 };
+  const FRACTION = new RegExp("^(?:" + FRAC_RE + "|\\d+\\s*/\\s*\\d+)$");
+  const canonUnit = (u) => (u ? lex.UNIT_MAP[String(u).toLowerCase()] || String(u) : "");
+  const add = (a, b) => ({ min: a.min + b.min, max: a.max + b.max });
+  const mul = (q, f) => ({ min: q.min * f, max: q.max * f });
+
+  /** Menge in der Einheit „to“ oder null, wenn die Einheiten nicht zusammenpassen. */
+  function convert(q, from, to) {
+    from = canonUnit(from); to = canonUnit(to);
+    if (from === to) return q;
+    if (MASS[from] && MASS[to]) return mul(q, MASS[from] / MASS[to]);
+    return null;
+  }
+
+  /** Anteil eines Verweises gemessen an der Gesamtmenge {qty, unit}:
+   *  {qty} feste Menge, {rest:true}, oder null (unbestimmt: „etwas“, „ein Teil“). */
+  function shareOf(portion, total) {
+    const p = String(portion || "").trim();
+    if (!p) return { qty: total.qty };
+    if (/^(rest|restliche[nrs]?|übrige[nrs]?|remaining|rest of the)$/i.test(p)) return { rest: true };
+    if (FRACTION.test(p)) { const f = parseQty(p); return f ? { qty: { min: total.qty.min * f.min, max: total.qty.max * f.max } } : null; }
+    const m = p.match(new RegExp("^(" + NUM_RE + "(?:\\s*(?:-|–|bis)\\s*" + NUM_RE + ")?)(?![\\d])\\s*(?:([A-Za-zÄÖÜäöüß]+\\.?)(?=[\\s,]|$))?"));
+    const q = m && parseQty(m[1]);
+    if (!q) return null;
+    const word = m[2] || "";
+    if (word && !lex.UNIT_MAP[word.toLowerCase()]) return null;
+    const c = convert(q, word, total.unit);
+    return c ? { qty: c } : null;
+  }
+
+  /** Gesamtmenge eines Knotens: Zutat mit Menge, Schritt als geschätztes Gewicht. */
+  function totalOf(m, idx, e, depth) {
+    if (!e || depth > 40) return null;
+    if (e.kind === "ingredient") {
+      const q = normQty(e.node.qty);
+      return q ? { qty: q, unit: canonUnit(e.node.unit) } : null;
+    }
+    if (e.kind !== "step") return null;
+    let sum = null;
+    const names = [];
+    for (const inp of e.node.inputs) {
+      const u = useAmount(m, idx, inp.ref, e.node.id, depth + 1);
+      if (!u) continue;
+      const g = convert(u.qty, u.unit, "g");
+      if (!g) continue;
+      sum = sum ? add(sum, g) : g;
+      names.push(...u.names);
+    }
+    return sum ? { qty: sum, unit: "g", est: true, names } : null;
+  }
+
+  /** Menge, die der Schritt „consumerId“ vom Knoten „ref“ bekommt: {qty, unit, est, names} oder null. */
+  function useAmount(m, idx, ref, consumerId, depth) {
+    depth = depth || 0;
+    const e = idx.byId.get(ref);
+    const total = totalOf(m, idx, e, depth);
+    if (!total) return null;
+    const uses = (idx.consumers.get(ref) || []);
+    const mine = uses.find((c) => c.step.id === consumerId);
+    if (!mine) return null;
+    const names = total.names || (e.kind === "ingredient" ? [e.node.name] : []);
+    const sh = shareOf(mine.portion, total);
+    if (!sh) return null;
+    if (sh.qty) return { qty: sh.qty, unit: total.unit, est: !!total.est, names };
+    // Rest: Gesamtmenge minus alle anderen Verwendungen, die sich beziffern lassen
+    let used = { min: 0, max: 0 };
+    for (const c of uses) {
+      if (c === mine) continue;
+      const o = shareOf(c.portion, total);
+      if (!o || !o.qty) return null;
+      used = add(used, o.qty);
+    }
+    const qty = { min: Math.max(0, total.qty.min - used.max), max: Math.max(0, total.qty.max - used.min) };
+    if (qty.max <= 0) return null;
+    return { qty, unit: total.unit, est: !!total.est, names };
+  }
+
+  /** „Rest“, „½“: ein Anteil ohne eigene Menge. */
+  const isRelative = (p) => /^(rest|restliche[nrs]?|übrige[nrs]?|remaining|rest of the)$/i.test(String(p || "").trim()) || FRACTION.test(String(p || "").trim());
+
+  /** Einheit passend zur Menge in Ein- oder Mehrzahl, Gramm ab 1000 als kg. */
+  function fmtUse(u, factor, unitWord) {
+    let q = mul(u.qty, factor || 1), unit = unitWord || u.unit || "";
+    if (unit === "g" && q.min >= 1000) { q = mul(q, 0.001); unit = "kg"; }
+    if (unit === "ml" && q.min >= 1000) { q = mul(q, 0.001); unit = "l"; }
+    const lw = unit.toLowerCase(), swap = q.max > 1 + 1e-9 ? UNIT_PLURAL[lw] : UNIT_SINGULAR[lw];
+    if (swap) unit = unit[0] === unit[0].toUpperCase() ? swap[0].toUpperCase() + swap.slice(1) : swap;
+    const n = fmtQty(q, 1, unit);
+    return n ? (u.est ? "≈ " : "") + n + (unit ? " " + unit : "") : "";
+  }
+
   function durText(d) {
     d = normDur(d);
     if (!d) return "";
@@ -407,5 +503,5 @@
     return prefix + i;
   }
 
-  FK.model = { parseQty, normQty, fmtNum, fmtQty, fmtAmount, scalePortion, durText, normDur, stem, keysFor, tokenMatchesKey, emptyModel, normalize, index, productLabel, refLabel, participle, lint, hasCycle, newId, NUM_RE };
+  FK.model = { parseQty, normQty, fmtNum, fmtQty, fmtAmount, scalePortion, useAmount, fmtUse, isRelative, durText, normDur, stem, keysFor, tokenMatchesKey, emptyModel, normalize, index, productLabel, refLabel, participle, lint, hasCycle, newId, NUM_RE };
 })(window.FK = window.FK || {});

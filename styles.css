@@ -174,6 +174,8 @@ table.fk th {
 table.fk th.h-amt { text-align: right; }
 table.fk td { border: 0; border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid); padding: 5px 8px; vertical-align: middle; }
 table.fk td.amt { text-align: right; min-width: 4.2rem; max-width: 8rem; font: 500 .8rem/1.25 var(--f-mono); border-right: 1px dotted var(--rule); color: var(--ink); }
+table.fk td.amt .pw { display: block; font: italic 400 .72rem/1.2 var(--f-ui); color: var(--muted); }
+table.fk td.amt .nb { color: var(--muted); font-weight: 400; }
 table.fk td.ing { min-width: 9rem; max-width: 15rem; }
 table.fk td.ing .nm { font-weight: 600; }
 table.fk td.ing .nt, table.fk td.ing .of { display: block; font-size: .76rem; color: var(--muted); line-height: 1.2; }

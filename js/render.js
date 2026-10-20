@@ -38,9 +38,27 @@
     return list;
   }
 
-  function leafAmount(row, factor) {
-    if (row.kind !== "ingredient") return "";
-    return row.portion ? M.scalePortion(row.portion, factor) : M.fmtAmount(row.node, factor);
+  /** Menge-Spalte: immer eine feste Menge, wo sie sich bestimmen lässt.
+   *  {main, word}: „1–2 Zehen“ + „Rest“, „≈ 500 g Kartoffeln“ + „½“; ohne Mengenangabe „n. B.“ */
+  function leafAmount(m, idx, row, factor) {
+    if (row.kind === "ingredient") {
+      const z = row.node;
+      if (!row.portion) return { main: M.fmtAmount(z, factor) || "n. B.", word: "", vague: !z.qty };
+      if (!M.isRelative(row.portion)) return { main: M.scalePortion(row.portion, factor), word: "" };
+      const u = M.useAmount(m, idx, row.ref, row.consumer);
+      return u ? { main: M.fmtUse(u, factor, z.unit), word: row.portion } : { main: row.portion, word: "" };
+    }
+    if (row.kind === "ref") {
+      const u = M.useAmount(m, idx, row.ref, row.consumer);
+      if (!u) return { main: row.portion ? M.scalePortion(row.portion, factor) : "alles", word: "" };
+      const what = row.step.product || (u.names.length === 1 ? u.names[0] : "Masse");
+      return { main: M.fmtUse(u, factor) + " " + what, word: row.portion };
+    }
+    return { main: "", word: "" };
+  }
+
+  function amtHtml(a) {
+    return (a.vague ? '<span class="nb" title="nach Belieben">' + esc(a.main) + "</span>" : esc(a.main)) + (a.word ? '<span class="pw">' + esc(a.word) + "</span>" : "");
   }
 
   // ---- Kochen: abgehakte Schritte, Timer -----------------------------------------------------
@@ -96,7 +114,7 @@
       const dn = row.kind !== "done" && done && done.has(row.consumer) ? " done" : "";
       const dfor = row.kind !== "done" && row.consumer ? ' data-for="' + attr(row.consumer) + '"' : "";
       // Ersetzungsfunktion statt -text: „$&“, „$'“ in einer ID würden sonst als Muster ausgewertet
-      h += leafCellsFlow(row, factor).replace(/<td class="(amt|ing)([^"]*)"/g, (_, a, b) => '<td class="' + a + b + dn + '"' + dfor);
+      h += leafCellsFlow(m, idx, row, factor).replace(/<td class="(amt|ing)([^"]*)"/g, (_, a, b) => '<td class="' + a + b + dn + '"' + dfor);
       for (let c = 1; c <= L.cols; c++) {
         const cell = L.grid[r][c - 1];
         if (!cell || cell.r0 !== r || cell.c0 !== c) continue;
@@ -111,7 +129,7 @@
     return { html: h, layout: L, notes };
   }
 
-  function leafCellsFlow(row, factor) {
+  function leafCellsFlow(m, idx, row, factor) {
     const dataRef = row.ref ? ' data-ing="' + attr(row.ref) + '"' : "";
     if (row.kind === "done") {
       return '<td class="amt done-row"><span class="chk" aria-hidden="true">✓</span></td><td class="ing done-row" data-step="' + attr(row.step.id) + '" title="Erledigt und ausgeblendet">' +
@@ -122,17 +140,17 @@
         (row.node.note ? ' <span class="nt">' + esc(row.node.note) + "</span>" : "") + "</td>";
     }
     if (row.kind === "ref") {
-      return '<td class="amt ref">' + esc(M.scalePortion(row.portion, factor)) + '</td><td class="ing ref" data-step="' + attr(row.step.id) + '"><span class="nm">' + esc(row.label) + "</span></td>";
+      return '<td class="amt ref">' + amtHtml(leafAmount(m, idx, row, factor)) + '</td><td class="ing ref" data-step="' + attr(row.step.id) + '"><span class="nm">' + esc(row.label) + "</span></td>";
     }
     if (row.kind !== "ingredient") return '<td class="amt"></td><td class="ing"></td>';
     const z = row.node;
-    const amt = leafAmount(row, factor);
+    const amt = amtHtml(leafAmount(m, idx, row, factor));
     let tags = "";
     if (row.uses > 1) tags += ' <span class="tag tag-split" title="Diese Zutat wird aufgeteilt">Teil ' + row.use + "/" + row.uses + "</span>";
     if (z.optional) tags += ' <span class="tag tag-opt">optional</span>';
     if (z.missing) tags += ' <span class="tag tag-miss" title="Wird in der Zubereitung genannt, fehlt aber in der Zutatenliste">fehlt in Liste</span>';
     const total = row.portion && z.qty ? '<span class="of">von ' + esc(M.fmtAmount(z, factor)) + "</span>" : "";
-    return '<td class="amt"' + dataRef + ">" + esc(amt) + '</td><td class="ing"' + dataRef + '><span class="nm">' + esc(z.name) + "</span>" +
+    return '<td class="amt"' + dataRef + ">" + amt + '</td><td class="ing"' + dataRef + '><span class="nm">' + esc(z.name) + "</span>" +
       (z.note && row.use === 1 ? ' <span class="nt">' + esc(z.note) + "</span>" : "") + total + tags + "</td>";
   }
 
