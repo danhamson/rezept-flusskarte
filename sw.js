@@ -2,7 +2,7 @@
  * Netz zuerst, damit Änderungen sofort ankommen; ohne Netz die zuletzt geladene Fassung.
  * VERSION und ASSETS schreibt tools/build.mjs.
  */
-const VERSION = "995fa2dac1";
+const VERSION = "28c08c2160";
 const ASSETS = ["./","index.html","manifest.webmanifest","icons/icon.svg","icons/icon-192.png","icons/icon-512.png","icons/apple-touch-icon.png","fonts/fonts.css","styles.css","js/theme.js","js/lexicon.js","js/model.js","js/parser.js","js/layout.js","js/schedule.js","js/render.js","js/share.js","js/ai.js","js/print.js","js/kitchen.js","js/app.js","fonts/barlow-condensed-n500-latin-ext.woff2","fonts/barlow-condensed-n500-latin.woff2","fonts/barlow-condensed-n600-latin-ext.woff2","fonts/barlow-condensed-n600-latin.woff2","fonts/barlow-condensed-n700-latin-ext.woff2","fonts/barlow-condensed-n700-latin.woff2","fonts/barlow-semi-condensed-i400-latin-ext.woff2","fonts/barlow-semi-condensed-i400-latin.woff2","fonts/barlow-semi-condensed-n400-latin-ext.woff2","fonts/barlow-semi-condensed-n400-latin.woff2","fonts/barlow-semi-condensed-n500-latin-ext.woff2","fonts/barlow-semi-condensed-n500-latin.woff2","fonts/barlow-semi-condensed-n600-latin-ext.woff2","fonts/barlow-semi-condensed-n600-latin.woff2","fonts/barlow-semi-condensed-n700-latin-ext.woff2","fonts/barlow-semi-condensed-n700-latin.woff2","fonts/ibm-plex-mono-n400-latin-ext.woff2","fonts/ibm-plex-mono-n400-latin.woff2","fonts/ibm-plex-mono-n500-latin-ext.woff2","fonts/ibm-plex-mono-n500-latin.woff2","fonts/source-serif-4-i400-latin-ext.woff2","fonts/source-serif-4-i400-latin.woff2","fonts/source-serif-4-n400-latin-ext.woff2","fonts/source-serif-4-n400-latin.woff2"];
 const CACHE = "flusskarte-" + VERSION;
 
