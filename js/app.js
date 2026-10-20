@@ -204,6 +204,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
         '<label class="btn ghost" for="json-file">JSON-Datei öffnen</label><input type="file" id="json-file" accept=".json,application/json" hidden></div>' +
         '<textarea id="json-edit" spellcheck="false" aria-label="Flusskarte als JSON">' + esc(JSON.stringify(exportModel(m), null, 2)) + '</textarea><p class="json-err" id="json-err"></p>';
     }
+    markNext();
     FK.kitchen.paint();
   }
 
@@ -214,6 +215,18 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     return '<div class="cook-tools" role="group" aria-label="Fortschritt"><span class="cook-n"><b>' + n + "</b>/" + m.steps.length + " erledigt</span>" +
       '<button type="button" class="btn ghost sm" data-cook="hide" aria-pressed="' + S.hideDone + '" title="Erledigte Äste einklappen; die Spalte vor einem offenen Schritt bleibt sichtbar">Erledigtes ausblenden</button>' +
       '<button type="button" class="btn ghost sm" data-cook="reset">Zurücksetzen</button></div>';
+  }
+
+  // Nächster offener Schritt (kleinste Nummer) und seine Mengenzellen hervorheben
+  function markNext() {
+    const v = $("#view");
+    $$(".next", v).forEach((el) => el.classList.remove("next"));
+    const m = S.model;
+    if (!m || (S.view !== "flow" && S.view !== "timeline")) return;
+    const done = new Set(S.done), s = m.steps.find((x) => !done.has(x.id));
+    if (!s) return;
+    const q = window.CSS && CSS.escape ? CSS.escape(s.id) : s.id;
+    $$('[data-step="' + q + '"][role="checkbox"], td.amt[data-for="' + q + '"]', v).forEach((el) => el.classList.add("next"));
   }
 
   // Haken an Ort und Stelle setzen: kein Neuaufbau, damit ein Doppelklick dasselbe Feld trifft.
@@ -231,6 +244,7 @@ Zubereitung (ca. 20 Min. aktiv, 60-70 Min. Ofen)
     $$('[data-for="' + q + '"]', v).forEach((el) => el.classList.toggle("done", on));
     const slot = $(".card-tools > :first-child", v);
     if (slot && S.model) slot.outerHTML = cookTools(S.model, new Set(S.done));
+    markNext();
     if (S.hideDone || !slot) {
       clearTimeout(doneTimer);
       doneTimer = setTimeout(() => {
